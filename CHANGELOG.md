@@ -1,3 +1,10 @@
+## [1.2.1](https://github.com/trononly/morphe-patches/compare/v1.2.0...v1.2.1) (2026-11-04)
+
+### 🐛 Bug Fixes
+
+* check Spotify classes by what they do, not by their dex bytes ([6741682](https://github.com/trononly/morphe-patches/commit/6741682b28f5c120e7e995537b49705a5d8789ec))
+* let Morphe 2.x patch the Spotify settings ABI ([f3d4221](https://github.com/trononly/morphe-patches/commit/f3d4221b24887db0630c71193ec8c693cd003703))
+
 ## [1.2.0](https://github.com/spicetify/morphe-patches/compare/v1.1.0...v1.2.0) (2026-10-08)
 
 ### ✨ New Features
