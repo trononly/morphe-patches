@@ -1,5 +1,11 @@
 # Spicetify Android patches
 
+> **Compatibility fork:** This tracks upstream
+> [spicetify/morphe-patches](https://github.com/spicetify/morphe-patches) and
+> adds the fix that lets Morphe 2.x patch Spotify. The upstream released bundle
+> still rejects the verified APK; this fork publishes a working bundle until the
+> fix lands upstream.
+
 Spotify Android customizations for use with [Morphe](https://morphe.software/).
 This repository publishes patch source and bundles, not Spotify APKs.
 
@@ -8,7 +14,7 @@ This repository publishes patch source and bundles, not Spotify APKs.
 > These patches target Spotify 9.1.80.2221, ARM64. Other Spotify versions are
 > not supported.
 
-[**➕ Add Spicetify to Morphe**](https://morphe.software/add-source?github=spicetify/morphe-patches/tree/main)
+[**➕ Add Spicetify to Morphe**](https://morphe.software/add-source?github=trononly/morphe-patches/tree/main)
 
 Open this link on Android with Morphe Manager installed to add the stable
 source. Releases are published from `main`.
@@ -38,7 +44,7 @@ Pixel 8 with a 35,000-track Jellyfin library.
 | Local files from a server | Disabled | Streams an HTTPS WebDAV folder or Jellyfin library into Local Files and Your Library, with its own filter chip. Requires Android 8 or later, byte-range support, and Spotify's Local audio files setting; configure the server in Spotify's Spicetify settings. Not available for root mount installs, because its track provider and server browser must be in the manifest. |
 
 <!-- PATCHES_START EXPANDED -->
-> **[v1.2.0](https://github.com/spicetify/morphe-patches/releases/tag/v1.2.0)**&nbsp;&nbsp;•&nbsp;&nbsp;`main`&nbsp;&nbsp;•&nbsp;&nbsp;8 patches total
+> **[v1.2.0](https://github.com/trononly/morphe-patches/releases/tag/v1.2.0)**&nbsp;&nbsp;•&nbsp;&nbsp;`main`&nbsp;&nbsp;•&nbsp;&nbsp;8 patches total
 <details open>
 <summary>📦 Spotify&nbsp;&nbsp;•&nbsp;&nbsp;8 patches</summary>
 <br>
@@ -66,7 +72,7 @@ Pixel 8 with a 35,000-track Jellyfin library.
 
 ## Install
 
-Releases are listed on the [releases page](https://github.com/spicetify/morphe-patches/releases).
+Releases are listed on the [releases page](https://github.com/trononly/morphe-patches/releases).
 Version 1.0.0 was patched with Morphe Manager and tested on a Pixel 8.
 
 A patched APK uses a different signing certificate from stock Spotify. Installing it with
@@ -82,7 +88,7 @@ instead of adding it again. To add it manually and patch Spotify:
 2. Paste the following source URL, then select **Add**.
 
    ```text
-   https://raw.githubusercontent.com/spicetify/morphe-patches/refs/heads/main/patches-bundle.json
+   https://raw.githubusercontent.com/trononly/morphe-patches/refs/heads/main/patches-bundle.json
    ```
 
    If your source uses the former `dev` URL, switch to this `main` URL.

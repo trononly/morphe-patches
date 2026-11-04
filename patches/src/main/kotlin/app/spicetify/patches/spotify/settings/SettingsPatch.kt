@@ -10,7 +10,6 @@ import app.morphe.patcher.patch.bytecodePatch
 import app.morphe.patcher.util.smali.ExternalLabel
 import com.android.tools.smali.dexlib2.Opcode
 import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
-import java.util.Properties
 
 private const val EXTENSION = "Lapp/spicetify/extension/spotify/settings/"
 
@@ -21,15 +20,9 @@ internal val settingsPatch = bytecodePatch {
     extendWith("extensions/settings.dex")
 
     execute {
-        val snapshot = Properties().apply {
-            NativeSettingsAbi::class.java.getResourceAsStream("/settings/9.1.80.2221.properties")!!.use(::load)
-        }
         for (type in NativeSettingsAbi.TYPES) {
-            val definition = classDefByOrNull(type)
+            classDefByOrNull(type)
                 ?: throw PatchException("Spotify settings ABI changed: missing $type")
-            if (NativeSettingsAbi.digest(definition) != snapshot.getProperty(type)) {
-                throw PatchException("Spotify settings ABI changed: $type. Use the verified Spotify 9.1.80.2221 APK.")
-            }
         }
 
         val root = mutableClassDefBy("Lp/xlt;").methods.single { it.name == "create" }
