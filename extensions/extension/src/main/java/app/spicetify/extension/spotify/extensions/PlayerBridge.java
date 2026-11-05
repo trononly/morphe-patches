@@ -2,6 +2,7 @@ package app.spicetify.extension.spotify.extensions;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.os.SystemClock;
 import android.util.Log;
 import app.spicetify.extension.spotify.settings.InstalledPatches;
 import java.io.IOException;
@@ -57,6 +58,10 @@ public final class PlayerBridge {
     private static volatile CosmosRouter router;
     private static volatile Stream stream;
     private static volatile Esperanto.PlayerState lastState;
+    /** {@link SystemClock#elapsedRealtime()} when {@link #lastState} arrived, for the lyric clock. */
+    private static volatile long lastStateAtElapsed = -1;
+    /** One refresh at a time; the lyrics ticker asks at most twice a second. */
+    private static volatile boolean refreshing;
     /** The latest thing that went wrong, shown on the bridge's problem line until it's resolved. */
     private static volatile String problem;
     /** The wait before the next reopen: it doubles each time up to a minute, and a state or a new router resets it. */
@@ -102,6 +107,8 @@ public final class PlayerBridge {
                 Log.w("Spicetify", "No application context to start the extensions with");
             } else {
                 post(() -> Extensions.startEnabled(context));
+                // The lyrics hook needs the current track even before the Marketplace switch exists.
+                post(() -> SpicyLyrics.start(context));
             }
         } catch (Throwable e) {
             Log.w("Spicetify", "Couldn't connect the player bridge", e);
@@ -180,6 +187,74 @@ public final class PlayerBridge {
         }
     }
 
+    /** A short-lived GetState subscription: its first answer is the live state, then it cancels. */
+    static void refreshState() {
+        synchronized (LOCK) {
+            if (refreshing) return;
+            refreshing = true;
+        }
+        CosmosRouter current = router;
+        if (current == null || destroyed(current)) {
+            refreshing = false;
+            return;
+        }
+        final AtomicReference<CosmosRouter.Cancel> cancel = new AtomicReference<>();
+        CosmosRouter.Callback callback = new CosmosRouter.Callback() {
+            @Override public void onResponse(int status, byte[] body) {
+                try {
+                    if (status != 200) {
+                        Log.w("Spicetify", "Refreshed player state answered status " + status);
+                        finishRefresh(cancel);
+                        return;
+                    }
+                    Esperanto.PlayerState state = Esperanto.parseState(body);
+                    // A new subscription's first answer is a default state with no track; keep the
+                    // subscription open until the player answers with a real one.
+                    if (state.trackUri == null || state.currentPositionMs() < 0) return;
+                    synchronized (LOCK) {
+                        lastState = state;
+                        lastStateAtElapsed = SystemClock.elapsedRealtime();
+                    }
+                    for (StateListener listener : LISTENERS) {
+                        try {
+                            listener.onState(state);
+                        } catch (Throwable e) {
+                            Log.w("Spicetify", "A player state listener failed", e);
+                        }
+                    }
+                    finishRefresh(cancel);
+                } catch (Throwable e) {
+                    Log.w("Spicetify", "Couldn't read the refreshed player state", e);
+                    finishRefresh(cancel);
+                }
+            }
+
+            @Override public void onError(Throwable error) {
+                Log.w("Spicetify", "Refreshed player state failed", error);
+                finishRefresh(cancel);
+            }
+        };
+        try {
+            cancel.set(current.resolve("SUB", GET_STATE, Esperanto.getState(), callback));
+        } catch (Throwable e) {
+            Log.w("Spicetify", "Couldn't refresh the player state", e);
+            refreshing = false;
+        }
+        postDelayed(() -> {
+            if (refreshing) {
+                refreshing = false;
+                CosmosRouter.Cancel pending = cancel.get();
+                if (pending != null) pending.cancel();
+            }
+        }, 2000);
+    }
+
+    private static void finishRefresh(AtomicReference<CosmosRouter.Cancel> cancel) {
+        refreshing = false;
+        CosmosRouter.Cancel pending = cancel.getAndSet(null);
+        if (pending != null) pending.cancel();
+    }
+
     /** Adds {@code listener}. The first one opens the {@code GetState} stream, as does the next one after it failed. */
     static void addStateListener(StateListener listener) {
         synchronized (LOCK) {
@@ -199,6 +274,11 @@ public final class PlayerBridge {
     /** The latest state of the open stream, or null when no stream is open or none has arrived. */
     static Esperanto.PlayerState lastState() {
         return lastState;
+    }
+
+    /** When the current state arrived, or -1 before the first one. */
+    static long lastStateAtElapsed() {
+        return lastStateAtElapsed;
     }
 
     /**
@@ -308,6 +388,7 @@ public final class PlayerBridge {
         synchronized (LOCK) {
             if (from != stream) return; // closed while this one was read
             lastState = state;
+            lastStateAtElapsed = SystemClock.elapsedRealtime();
             problem = null;
             reopenMillis = FIRST_REOPEN_MILLIS;
         }
@@ -319,6 +400,7 @@ public final class PlayerBridge {
             }
         }
     }
+
 
     /** On the bridge thread. While anything listens, the stream opens again after the backoff. */
     private static void onStreamError(Stream from, Throwable error) {

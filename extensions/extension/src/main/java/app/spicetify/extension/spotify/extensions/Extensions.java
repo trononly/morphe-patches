@@ -19,6 +19,7 @@ public final class Extensions {
     public static final String RANDOM_SONG = "random_song";
     public static final String SHUFFLE_PLUS = "shuffle_plus";
     public static final String HIDE_PODCASTS = "hide_podcasts";
+    public static final String SPICY_LYRICS = "spicy_lyrics";
 
     /**
      * Each extension on Android: its id, the desktop extension it ports as owner/repo/main, or null
@@ -34,6 +35,8 @@ public final class Extensions {
                         + " to play a playlist, album or Liked Songs in a truly random order."},
         {HIDE_PODCASTS, "theRealPadster/spicetify-hide-podcasts/hidePodcasts.js", "Hide podcasts",
                 "Hide podcasts and episodes on Home and in Search, and their filters there and in Your Library."},
+        {SPICY_LYRICS, "spikerko/spicy-lyrics/spicy-lyrics.mjs", "Spicy Lyrics",
+                "Word-by-word karaoke lyrics with animated backgrounds, romanization and translations."},
     };
     private static final String PREFERENCES = "spicetify_extensions";
     private static final Map<String, SwitchListener> SWITCHES = new ConcurrentHashMap<>();
@@ -52,6 +55,11 @@ public final class Extensions {
             ShufflePlus.register();
         } catch (Throwable e) {
             Log.w("Spicetify", "Couldn't register Shuffle+", e);
+        }
+        try {
+            SpicyLyrics.register();
+        } catch (Throwable e) {
+            Log.w("Spicetify", "Couldn't register Spicy Lyrics", e);
         }
     }
 

@@ -231,6 +231,20 @@ val extensionsPatch = bytecodePatch(
         """.trimIndent(), ExternalLabel("handled", chipEvents.getInstruction(1214)))
         shuffleButton.addInstructions(62,
             "invoke-static {v2}, Lapp/spicetify/extension/spotify/extensions/NowPlayingShuffle;->onButton(Landroid/view/View;)V")
+        // The full-screen lyrics page is a Tome PageActivity with this intent:
+        //   Intent { dat=spotify:lyrics:fullscreen }
+        // onStart runs after the activity's content root exists, so the extension can mount over it.
+        val pageActivity = mutableClassDefBy("Lcom/spotify/tome/pageactivity/PageActivity;")
+        val pageStart = pageActivity.methods.single {
+            it.name == "onStart" && it.parameterTypes.isEmpty()
+        }
+        pageStart.addInstructions(0,
+            "invoke-static {p0}, Lapp/spicetify/extension/spotify/extensions/SpicyLyrics;->onPageActivity(Landroid/app/Activity;)V")
+        val pageNewIntent = pageActivity.methods.single {
+            it.name == "onNewIntent" && it.parameterTypes == listOf("Landroid/content/Intent;")
+        }
+        pageNewIntent.addInstructions(0,
+            "invoke-static {p0, p1}, Lapp/spicetify/extension/spotify/extensions/SpicyLyrics;->onPageIntent(Landroid/app/Activity;Landroid/content/Intent;)V")
         listMenu.addInstructions(4, """
             invoke-static {v4}, $PLAYLIST_MENU_PROVIDER->providers(Ljava/util/List;)Ljava/util/List;
             move-result-object v4

@@ -42,8 +42,55 @@ final class Esperanto {
         String trackUri;
         String trackUid;
         List<String> artistUris = new ArrayList<>();
+        /** The ProvidedTrack metadata, including title, artist_name, image_url and duration. */
+        Map<String, String> metadata = new TreeMap<>();
+        /** Position and duration from ContextPlayerState fields 10 and 11, in milliseconds. */
+        long positionMs = -1;
+        long trackDurationMs = -1;
+        /** ContextPlayerState field 9/1: the media state (2 paused, 3 playing, 6 buffering). */
+        int playbackState = -1;
         boolean advertisement;
         boolean episode;
+
+        boolean isPlaying() {
+            return playbackState == 3 || playbackState == 4 || playbackState == 5
+                    || playbackState == 6;
+        }
+
+        String title() {
+            return metadata.get("title");
+        }
+
+        String artist() {
+            return metadata.get("artist_name");
+        }
+
+        String imageUrl() {
+            return metadata.get("image_url");
+        }
+
+        long durationMs() {
+            if (trackDurationMs >= 0) return trackDurationMs;
+            String value = metadata.get("duration");
+            if (value == null) return -1;
+            try {
+                return Long.parseLong(value);
+            } catch (NumberFormatException e) {
+                return -1;
+            }
+        }
+
+        /** Field 10 when present, otherwise the ProvidedTrack's {@code media.start_position}. */
+        long currentPositionMs() {
+            if (positionMs >= 0) return positionMs;
+            String value = metadata.get("media.start_position");
+            if (value == null) return -1;
+            try {
+                return Long.parseLong(value);
+            } catch (NumberFormatException e) {
+                return -1;
+            }
+        }
     }
 
     /** {@code ContextPlayerState{2 context_uri, 7 track: ProvidedTrack{1 context_track}}}; everything else is skipped. */
@@ -58,6 +105,15 @@ final class Esperanto {
                 case 7:
                     readProvidedTrack(reader.message(), state);
                     break;
+                case 9:
+                    readPlaybackState(reader.message(), state);
+                    break;
+                case 10:
+                    state.positionMs = readTime(reader.message());
+                    break;
+                case 11:
+                    state.trackDurationMs = readTime(reader.message());
+                    break;
                 default:
                     reader.skip();
             }
@@ -65,8 +121,31 @@ final class Esperanto {
         return state;
     }
 
-    private static void readProvidedTrack(Wire.Reader providedTrack, PlayerState state) throws IOException {
-        while (providedTrack.next()) {
+    /** {@code ContextPlayerState field 9: field 1 is the media state}. */
+    private static void readPlaybackState(Wire.Reader playback, PlayerState state) throws IOException {
+        while (playback.next()) {
+            if (playback.field() == 1) {
+                state.playbackState = (int) playback.varint();
+            } else {
+                playback.skip();
+            }
+        }
+    }
+
+    /** A time message ({@code {1: milliseconds}}), as fields 10 and 11 carry it. */
+    private static long readTime(Wire.Reader time) throws IOException {
+        long value = -1;
+        while (time.next()) {
+            if (time.field() == 1) {
+                value = time.varint();
+            } else {
+                time.skip();
+            }
+        }
+        return value;
+    }
+
+    private static void readProvidedTrack(Wire.Reader providedTrack, PlayerState state) throws IOException {        while (providedTrack.next()) {
             if (providedTrack.field() == 1) {
                 readContextTrack(providedTrack.message(), state);
             } else {
@@ -101,6 +180,7 @@ final class Esperanto {
         }
         state.advertisement = "true".equals(metadata.get("is_advertisement"));
         state.episode = isEpisodeUri(state.trackUri);
+        state.metadata = metadata;
     }
 
     private static void readMetadataEntry(Wire.Reader entry, Map<String, String> metadata) throws IOException {

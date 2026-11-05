@@ -126,6 +126,9 @@ node_modules/
 .idea/
 local.properties
 
+# Local secrets (Spicy Lyrics keys, etc.)
+.env
+
 # Local APK inputs and signing material
 *.apkm
 *.apks
