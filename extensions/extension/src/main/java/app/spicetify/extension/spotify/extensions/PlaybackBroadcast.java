@@ -1,5 +1,6 @@
 package app.spicetify.extension.spotify.extensions;
 
+import android.annotation.SuppressLint;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -36,6 +37,7 @@ public final class PlaybackBroadcast {
 
     private PlaybackBroadcast() {}
 
+    @SuppressLint("UnspecifiedRegisterReceiverFlag")
     static void start(Context context) {
         if (context == null) return;
         synchronized (LOCK) {

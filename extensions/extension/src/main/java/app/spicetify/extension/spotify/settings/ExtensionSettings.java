@@ -14,12 +14,9 @@ import app.spicetify.extension.spotify.extensions.PlayerBridge;
 import app.spicetify.extension.spotify.extensions.RandomSong;
 import app.spicetify.extension.spotify.extensions.ShufflePlus;
 import app.spicetify.extension.spotify.extensions.TrashBin;
+import app.spicetify.extension.spotify.lyrics.LyricsSettings;
 import org.json.JSONException;
 
-/**
- * The extensions on Spicetify settings' root page: each one that is on, with its latest status, and
- * the Marketplace to turn them on. Tapping one opens its sheet: its switch, and its own controls.
- */
 final class ExtensionSettings {
     private ExtensionSettings() {}
 
@@ -33,17 +30,16 @@ final class ExtensionSettings {
             content.addView(line);
         }
         for (String id : Extensions.enabled(screen)) {
-            SpotifyStyle.actionRow(content, Extensions.title(id), Extensions.latestStatus(id), view -> open(screen, id));
+            SpotifyStyle.actionRow(content, Extensions.title(id), Extensions.latestStatus(id),
+                    view -> open(screen, id));
         }
         SpotifyStyle.actionRow(content, "Spicetify Marketplace", "Turn extensions on in its Extensions tab",
                 view -> screen.openPage(SpicetifySettingsScreen.PAGE_EXTENSIONS));
     }
 
-    /** Extension {@code id}'s sheet. Closing it brings the root page up to date. */
     static void open(SpicetifySettingsScreen screen, String id) {
         LinearLayout rows = SpotifyStyle.column(screen);
         boolean on = Extensions.isOn(screen, id);
-        // Rows that only work while the extension is on show only while its switch is.
         LinearLayout whileOn = SpotifyStyle.column(screen);
         whileOn.setVisibility(on ? View.VISIBLE : View.GONE);
         SpotifyStyle.toggleRow(rows, Extensions.title(id), on ? Extensions.latestStatus(id) : "Off", on, (button, checked) -> {
@@ -70,6 +66,36 @@ final class ExtensionSettings {
                     "Hide audiobooks on Home and in Search, and the Books and Authors filters in Your Library.",
                     HidePodcasts.audiobooksHidden(screen), (button, hidden) -> HidePodcasts.setAudiobooksHidden(screen, hidden));
         }
+        if (Extensions.SPICY_LYRICS.equals(id)) {
+            SpotifyStyle.toggleRow(rows, "Performance background",
+                    "Single colour instead of the drifting three-colour wash.",
+                    LyricsSettings.performanceMode(screen),
+                    (button, checked) -> LyricsSettings.setPerformanceMode(screen, checked));
+            LinearLayout dots = SpotifyStyle.column(screen);
+            TextView label = SpotifyStyle.body(screen,
+                    "Interlude dot size: " + String.format(java.util.Locale.US, "%.1f", LyricsSettings.dotScale(screen)));
+            label.setPadding(SpotifyStyle.dp(screen, 16), SpotifyStyle.dp(screen, 8),
+                    SpotifyStyle.dp(screen, 16), 0);
+            dots.addView(label);
+            android.widget.SeekBar bar = new android.widget.SeekBar(screen);
+            bar.setMax(200);
+            bar.setProgress(Math.round((LyricsSettings.dotScale(screen) - 0.5f) * 100));
+            bar.setOnSeekBarChangeListener(new android.widget.SeekBar.OnSeekBarChangeListener() {
+                @Override public void onProgressChanged(android.widget.SeekBar seekBar, int progress, boolean fromUser) {
+                    float value = 0.5f + progress / 100f;
+                    LyricsSettings.setDotScale(screen, value);
+                    label.setText("Interlude dot size: "
+                            + String.format(java.util.Locale.US, "%.1f", value));
+                }
+
+                @Override public void onStartTrackingTouch(android.widget.SeekBar seekBar) {}
+
+                @Override public void onStopTrackingTouch(android.widget.SeekBar seekBar) {}
+            });
+            dots.addView(bar, new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+            rows.addView(dots);
+        }
         rows.addView(whileOn);
         SpotifySheet sheet = new SpotifySheet(screen, Extensions.title(id), Extensions.description(id));
         sheet.view(rows).secondary("Close");
@@ -77,7 +103,6 @@ final class ExtensionSettings {
         sheet.show();
     }
 
-    /** Trash Bin's Export, Import and Clear. After an export, {@code exported} says what was copied. */
     private static void trashBin(SpicetifySettingsScreen screen, LinearLayout controls, String exported) {
         controls.removeAllViews();
         String trash = count(TrashBin.songCount(screen), "song") + " and " + count(TrashBin.artistCount(screen), "artist");
@@ -112,7 +137,6 @@ final class ExtensionSettings {
                     try {
                         TrashBin.importJson(screen, list.getText().toString());
                     } catch (JSONException | StackOverflowError notAList) {
-                        // StackOverflowError: a paste nested deeper than the parser's stack.
                         // Android shows an error's message only on a focused field.
                         list.requestFocus();
                         list.setError("That isn't an exported trash list.");

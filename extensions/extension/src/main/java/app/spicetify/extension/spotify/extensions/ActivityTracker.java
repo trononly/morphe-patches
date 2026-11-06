@@ -13,9 +13,11 @@ import java.lang.ref.WeakReference;
  * starts, when the extensions patch is installed. Android calls it on the main thread.
  */
 public final class ActivityTracker implements Application.ActivityLifecycleCallbacks {
+    private static final String PAGE_ACTIVITY = "com.spotify.tome.pageactivity.PageActivity";
     private static volatile ActivityTracker installed;
     /** Weak, so an Activity Android is done with can still be collected. Null while none is resumed. */
     private volatile WeakReference<Activity> resumed;
+    private volatile WeakReference<Activity> lyricsHost;
 
     private ActivityTracker() {}
 
@@ -37,9 +39,21 @@ public final class ActivityTracker implements Application.ActivityLifecycleCallb
         return kept == null ? null : kept.get();
     }
 
+    /** The last resumed non-Tome Activity, or null. This is the lyrics overlay's stable host. */
+    static Activity lyricsHost() {
+        ActivityTracker tracker = installed;
+        WeakReference<Activity> kept = tracker == null ? null : tracker.lyricsHost;
+        Activity activity = kept == null ? null : kept.get();
+        if (activity == null || activity.isFinishing() || activity.isDestroyed()) return null;
+        return activity;
+    }
+
     @Override
     public void onActivityResumed(Activity activity) {
         resumed = new WeakReference<>(activity);
+        if (!PAGE_ACTIVITY.equals(activity.getClass().getName())) {
+            lyricsHost = new WeakReference<>(activity);
+        }
     }
 
     /** Only the kept Activity's pause forgets it: in split screen, two can be resumed at once. */
@@ -53,5 +67,8 @@ public final class ActivityTracker implements Application.ActivityLifecycleCallb
     @Override public void onActivityStarted(Activity activity) {}
     @Override public void onActivityStopped(Activity activity) {}
     @Override public void onActivitySaveInstanceState(Activity activity, Bundle state) {}
-    @Override public void onActivityDestroyed(Activity activity) {}
+    @Override public void onActivityDestroyed(Activity activity) {
+        WeakReference<Activity> kept = lyricsHost;
+        if (kept != null && kept.get() == activity) lyricsHost = null;
+    }
 }

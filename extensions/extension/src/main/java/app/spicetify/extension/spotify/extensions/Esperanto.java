@@ -21,9 +21,9 @@ final class Esperanto {
     /** With an underscore in {@code your_library_esperanto}; the dotted name has no route. */
     static final String YOUR_LIBRARY = "spotify.your_library_esperanto.proto.YourLibraryService";
     static final String LIKED_SONGS = "spotify:playlist:37i9dQZF1F5p3rmiWPIYgZ";
-    /** {@link #parseResult}'s answer when the player takes a command. */
+
     static final int OK = 0;
-    /** {@link #parseResult}'s answer when the player refuses a command. */
+
     static final int FORBIDDEN = 1;
 
     private static final String BASE62_ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -35,19 +35,20 @@ final class Esperanto {
 
     private Esperanto() {}
 
-    /** A parsed {@code ContextPlayerState}: the fields the extensions read. */
     static final class PlayerState {
-        /** The playlist, album or other list that's playing, or null when nothing is loaded. */
+
         String contextUri;
         String trackUri;
         String trackUid;
         List<String> artistUris = new ArrayList<>();
-        /** The ProvidedTrack metadata, including title, artist_name, image_url and duration. */
+
+        List<String> nextTrackUris = new ArrayList<>();
+
         Map<String, String> metadata = new TreeMap<>();
-        /** Position and duration from ContextPlayerState fields 10 and 11, in milliseconds. */
+
         long positionMs = -1;
         long trackDurationMs = -1;
-        /** ContextPlayerState field 9/1: the media state (2 paused, 3 playing, 6 buffering). */
+
         int playbackState = -1;
         boolean advertisement;
         boolean episode;
@@ -66,11 +67,12 @@ final class Esperanto {
         }
 
         String imageUrl() {
-            return metadata.get("image_url");
+            String url = metadata.get("image_url");
+            if (url == null) url = metadata.get("image_xlarge_url");
+            return url;
         }
 
         long durationMs() {
-            if (trackDurationMs >= 0) return trackDurationMs;
             String value = metadata.get("duration");
             if (value == null) return -1;
             try {
@@ -80,7 +82,6 @@ final class Esperanto {
             }
         }
 
-        /** Field 10 when present, otherwise the ProvidedTrack's {@code media.start_position}. */
         long currentPositionMs() {
             if (positionMs >= 0) return positionMs;
             String value = metadata.get("media.start_position");
@@ -93,7 +94,6 @@ final class Esperanto {
         }
     }
 
-    /** {@code ContextPlayerState{2 context_uri, 7 track: ProvidedTrack{1 context_track}}}; everything else is skipped. */
     static PlayerState parseState(byte[] contextPlayerState) throws IOException {
         PlayerState state = new PlayerState();
         Wire.Reader reader = new Wire.Reader(contextPlayerState);
@@ -114,6 +114,10 @@ final class Esperanto {
                 case 11:
                     state.trackDurationMs = readTime(reader.message());
                     break;
+                case 21:
+                    String nextUri = readProvidedTrackUri(reader.message());
+                    if (nextUri != null) state.nextTrackUris.add(nextUri);
+                    break;
                 default:
                     reader.skip();
             }
@@ -121,7 +125,25 @@ final class Esperanto {
         return state;
     }
 
-    /** {@code ContextPlayerState field 9: field 1 is the media state}. */
+    private static String readProvidedTrackUri(Wire.Reader providedTrack) throws IOException {
+        String uri = null;
+        while (providedTrack.next()) {
+            if (providedTrack.field() == 1) {
+                Wire.Reader contextTrack = providedTrack.message();
+                while (contextTrack.next()) {
+                    if (contextTrack.field() == 1 && uri == null) {
+                        uri = contextTrack.string();
+                    } else {
+                        contextTrack.skip();
+                    }
+                }
+            } else {
+                providedTrack.skip();
+            }
+        }
+        return uri;
+    }
+
     private static void readPlaybackState(Wire.Reader playback, PlayerState state) throws IOException {
         while (playback.next()) {
             if (playback.field() == 1) {
@@ -132,7 +154,6 @@ final class Esperanto {
         }
     }
 
-    /** A time message ({@code {1: milliseconds}}), as fields 10 and 11 carry it. */
     private static long readTime(Wire.Reader time) throws IOException {
         long value = -1;
         while (time.next()) {
@@ -154,7 +175,6 @@ final class Esperanto {
         }
     }
 
-    /** {@code ContextTrack{1 uri, 2 uid, 3 metadata: map<string, string>}}. */
     private static void readContextTrack(Wire.Reader contextTrack, PlayerState state) throws IOException {
         Map<String, String> metadata = new TreeMap<>();
         while (contextTrack.next()) {
@@ -210,31 +230,22 @@ final class Esperanto {
                         || uri.startsWith("spotify:clip:"));
     }
 
-    // ---- Request builders ----
 
-    /** {@code SkipNextRequest} with no fields: skip to whatever plays next. */
     static byte[] skipNext() {
         return new byte[0];
     }
 
-    /**
-     * {@code GetStateRequest{1 prev_tracks_cap{1 0}, 2 next_tracks_cap{1 0}}}, each cap an
-     * {@code OptionalInt64}. The extensions read only the current track, so a state leaves out the
-     * tracks before and after it and stays small on a big playlist.
-     */
     static byte[] getState() {
         Wire.Writer none = new Wire.Writer();
         none.varint(1, 0);
+        Wire.Writer one = new Wire.Writer();
+        one.varint(1, 1);
         Wire.Writer request = new Wire.Writer();
         request.message(1, none);
-        request.message(2, none);
+        request.message(2, one);
         return request.toByteArray();
     }
 
-    /**
-     * {@code PlayRequest{1 prepare_play_request{1 context{3 uri, 4 url}, 2 options{3 skip_to{4
-     * track_uri}}}}}: plays {@code contextUri}, from {@code skipToTrackUri} when it isn't null.
-     */
     static byte[] playContext(String contextUri, String skipToTrackUri) {
         Wire.Writer context = new Wire.Writer();
         context.string(3, contextUri);
@@ -292,12 +303,6 @@ final class Esperanto {
         return request.toByteArray();
     }
 
-    /**
-     * {@code PlaylistGetRequest{1 uri, 2 query, 3 policy}}: {@code length} songs of {@code uri} from
-     * {@code start}, and the list's length. The query leaves out banned songs, songs by banned artists,
-     * recommendations, episodes and songs that can't play ({@code show_unavailable} false), and so does
-     * that length.
-     */
     static byte[] playlistGet(String uri, int start, int length) {
         Wire.Writer range = new Wire.Writer();
         range.varint(1, start);
@@ -330,24 +335,13 @@ final class Esperanto {
         return packed.toByteArray();
     }
 
-    /** {@code GetEntityRequest{1 uri}}, for an album's track list. */
     static byte[] getEntity(String uri) {
         Wire.Writer request = new Wire.Writer();
         request.string(1, uri);
         return request.toByteArray();
     }
 
-    // YourLibraryService (sp://esperanto/spotify.your_library_esperanto.proto.YourLibraryService/All), 9.1.80.2221
-    // Request   1 header, 4 predefined_playlist_configs, 5 update_throttling
-    // Header    11 skip, 12 length (0 = empty page), 14 filters{1 packed enum}, 16 folder_id (int64),
-    //           17 all_playlists, 18 total_count, 22 separate_pinned_items, 25 num_link_types_in_playlists,
-    //           26 ignore_pinning
-    // Filter    0 ALBUM, 1 ARTIST, 2 PLAYLIST, 3 SHOW, 4 BOOK, 100 DOWNLOADED, 101 WRITABLE, 102 BY_YOU
-    // Response  1 header{9 remaining_entities, 12 is_loading, 17 total_count}, 2 entity*, 3 pinned_entity*,
-    //           98 status_code (200 = OK), 99 error
     // Entity    1 entity_info{2 name, 3 uri}; case 2 album, 3 artist, 4 playlist (Liked Songs too), 6 folder
-    // Playlist  12 number_of_items_per_link_type*{1 link_type (4 TRACK, 63 EPISODE), 2 num_items}
-    // Folder    2 number_of_playlists, 3 number_of_folders; folder uri spotify:user:<u>:folder:<16 hex> = folder_id
 
     /**
      * Every playlist, with folders flattened, and every saved album, in one page: {@code header{12
@@ -377,9 +371,7 @@ final class Esperanto {
                 || uri.startsWith("spotify:user:") && uri.endsWith(":collection");
     }
 
-    // ---- Response parsers ----
 
-    /** The error code of a command's {@code ResponseWithReasons{1 error}}: 0 when it worked. */
     static int parseResult(byte[] responseWithReasons) throws IOException {
         Wire.Reader reader = new Wire.Reader(responseWithReasons);
         int error = 0;
@@ -403,11 +395,6 @@ final class Esperanto {
         boolean loading;
     }
 
-    /**
-     * Reads a {@code PlaylistGetResponse{1 status{1 status_code}, 2 data{1 item*{18 uri}, 4
-     * unranged_length, 6 loading_contents}}}. A list that's forbidden, gone or blocked in the user's country (403, 404,
-     * 451) reads as an empty page; any other status outside 2xx throws.
-     */
     static PlaylistPage parsePlaylistGet(byte[] playlistGetResponse) throws IOException {
         PlaylistPage page = new PlaylistPage();
         Wire.Reader response = new Wire.Reader(playlistGetResponse);
@@ -480,7 +467,7 @@ final class Esperanto {
     /** Where a random song from the library can come from: Liked Songs, a playlist or a saved album. */
     static final class LibrarySource {
         String uri;
-        /** Its name and cover in Your Library, for the Home pins picker, or null without one. */
+
         String name;
         String image;
         boolean album;
@@ -545,7 +532,6 @@ final class Esperanto {
         return loading;
     }
 
-    /** The case comes from the tag, never the content: a member can be an empty message. */
     private static void readLibraryEntity(Wire.Reader entity, Map<String, LibrarySource> found) throws IOException {
         LibrarySource source = new LibrarySource();
         int kind = 0;
@@ -571,10 +557,6 @@ final class Esperanto {
         found.putIfAbsent(source.uri, source);
     }
 
-    /**
-     * {@code entity_info{2 name, 3 uri, 6 image_uri}}. The cover is as the core gives it, such as
-     * {@code spotify:image:<id>}.
-     */
     private static void readEntityInfo(Wire.Reader entityInfo, LibrarySource source) throws IOException {
         while (entityInfo.next()) {
             switch (entityInfo.field()) {
@@ -593,7 +575,6 @@ final class Esperanto {
         }
     }
 
-    /** The TRACK entry of {@code number_of_items_per_link_type}, or -1 when there's none. */
     private static int readTrackCount(Wire.Reader playlist) throws IOException {
         int tracks = -1;
         while (playlist.next()) {
@@ -618,10 +599,6 @@ final class Esperanto {
         return tracks;
     }
 
-    /**
-     * An album's tracks from a {@code GetEntityResponse{1 item{3 album{11 disc*{3 track*{1 gid}}}}}},
-     * as {@code spotify:track:} uris in disc order.
-     */
     static List<String> parseAlbumTracks(byte[] getEntityResponse) throws IOException {
         List<String> uris = new ArrayList<>();
         Wire.Reader response = new Wire.Reader(getEntityResponse);
@@ -675,7 +652,6 @@ final class Esperanto {
         }
     }
 
-    /** Encodes a 16 byte gid as 22 zero padded base62 characters, big endian. */
     static String base62(byte[] gid) {
         BigInteger value = new BigInteger(1, gid);
         BigInteger base = BigInteger.valueOf(62);

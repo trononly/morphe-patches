@@ -93,6 +93,11 @@ public final class SpicyApi {
 
     /** Fetches one track's best sync. The caller owns the background thread. */
     public static Lyrics fetch(String trackId, String key) throws IOException {
+        return parse(fetchRaw(trackId, key));
+    }
+
+    /** Fetches the raw response body, so callers can cache it verbatim. */
+    public static String fetchRaw(String trackId, String key) throws IOException {
         if (trackId == null || !trackId.matches("[A-Za-z0-9]{22}")) {
             throw new IOException("Invalid Spotify track id");
         }
@@ -115,7 +120,7 @@ public final class SpicyApi {
             if (status != 200) {
                 throw new IOException("Spicy Lyrics HTTP " + status);
             }
-            return parse(raw);
+            return raw;
         } finally {
             connection.disconnect();
         }
