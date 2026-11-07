@@ -102,9 +102,21 @@ public final class Extensions {
         return on;
     }
 
+    /** Every extension in settings order, whether on or off. */
+    public static List<String> all() {
+        List<String> ids = new ArrayList<>();
+        for (String[] port : PORTS) ids.add(port[0]);
+        return ids;
+    }
+
     /** Whether the user turned extension {@code id} on; every extension starts off. */
     public static boolean isOn(Context context, String id) {
         return preferences(context).getBoolean(id, false);
+    }
+
+    public static boolean effectiveOn(Context context, String id) {
+        if (SPICY_LYRICS.equals(id)) return SpicyLyrics.enabled(context);
+        return isOn(context, id);
     }
 
     /** Saves the switch, then tells the extension's listener. */

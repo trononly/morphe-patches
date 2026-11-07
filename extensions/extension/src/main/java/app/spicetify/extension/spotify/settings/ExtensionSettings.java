@@ -28,9 +28,10 @@ final class ExtensionSettings {
             line.setPadding(side, SpotifyStyle.dp(screen, 8), side, 0);
             content.addView(line);
         }
-        for (String id : Extensions.enabled(screen)) {
-            SpotifyStyle.actionRow(content, Extensions.title(id), Extensions.latestStatus(id),
-                    view -> open(screen, id));
+        for (String id : Extensions.all()) {
+            boolean on = Extensions.effectiveOn(screen, id);
+            SpotifyStyle.actionRow(content, Extensions.title(id),
+                    on ? Extensions.latestStatus(id) : "Off", view -> open(screen, id));
         }
         SpotifyStyle.actionRow(content, "Spicetify Marketplace", "Turn extensions on in its Extensions tab",
                 view -> screen.openPage(SpicetifySettingsScreen.PAGE_EXTENSIONS));
@@ -38,7 +39,7 @@ final class ExtensionSettings {
 
     static void open(SpicetifySettingsScreen screen, String id) {
         LinearLayout rows = SpotifyStyle.column(screen);
-        boolean on = Extensions.isOn(screen, id);
+        boolean on = Extensions.effectiveOn(screen, id);
         LinearLayout whileOn = SpotifyStyle.column(screen);
         whileOn.setVisibility(on ? View.VISIBLE : View.GONE);
         SpotifyStyle.toggleRow(rows, Extensions.title(id), on ? Extensions.latestStatus(id) : "Off", on, (button, checked) -> {

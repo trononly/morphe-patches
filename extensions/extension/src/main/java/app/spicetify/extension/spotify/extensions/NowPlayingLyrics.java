@@ -11,7 +11,10 @@ import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Handler;
 import android.os.Looper;
+import android.text.SpannableString;
+import android.text.Spanned;
 import android.text.TextUtils;
+import android.text.style.ForegroundColorSpan;
 import android.util.Log;
 import android.util.TypedValue;
 import android.view.Gravity;
@@ -142,27 +145,29 @@ public final class NowPlayingLyrics {
             header.addView(title, new LinearLayout.LayoutParams(
                     0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
             ShareGlyphView share = new ShareGlyphView(context);
-            share.setGlyphSize(18f);
+            share.setGlyphSize(16f);
+            share.setBackground(circle());
             share.setOnClickListener(v -> openShare());
-            header.addView(share, new LinearLayout.LayoutParams(dp(context, 36), dp(context, 36)));
+            header.addView(share, new LinearLayout.LayoutParams(dp(context, 32), dp(context, 32)));
             TextView expand = new TextView(context);
             expand.setText("\u2922");
             expand.setTextColor(Color.WHITE);
-            expand.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
+            expand.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
             expand.setGravity(Gravity.CENTER);
+            expand.setBackground(circle());
             expand.setContentDescription("Open full screen lyrics");
             expand.setOnClickListener(v -> openFullscreen());
-            header.addView(expand, new LinearLayout.LayoutParams(dp(context, 36), dp(context, 36)));
+            header.addView(expand, new LinearLayout.LayoutParams(dp(context, 32), dp(context, 32)));
             addView(header, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
 
             for (int i = 0; i < LINES; i++) {
                 TextView line = new TextView(context);
                 line.setTextColor(0x99FFFFFF);
                 line.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
-                line.setLineSpacing(0, 1.15f);
+                line.setLineSpacing(dp(context, 4), 1.25f);
                 line.setMaxLines(2);
                 line.setEllipsize(TextUtils.TruncateAt.END);
-                line.setPadding(0, dp(context, 4), 0, 0);
+                line.setPadding(0, dp(context, 6), 0, 0);
                 addView(line, ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.WRAP_CONTENT);
                 lines[i] = line;
@@ -284,9 +289,11 @@ public final class NowPlayingLyrics {
                     continue;
                 }
                 lines[i].setVisibility(VISIBLE);
-                lines[i].setText(lyrics.lines.get(index).text);
                 boolean current = active >= 0 && i == 0;
-                lines[i].setTextColor(current ? Color.WHITE : 0x99FFFFFF);
+                lines[i].setText(current
+                        ? fillText(lyrics.lines.get(index), pos)
+                        : lyrics.lines.get(index).text);
+                lines[i].setTextColor(0x99FFFFFF);
                 lines[i].setTypeface(current ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
             }
             if (active != lastActive) {
@@ -294,6 +301,38 @@ public final class NowPlayingLyrics {
                 lines[0].setAlpha(0.35f);
                 lines[0].animate().alpha(1f).setDuration(220).start();
             }
+        }
+
+        private CharSequence fillText(SpicyApi.Line line, long pos) {
+            String text = line.text == null ? "" : line.text;
+            SpannableString spans = new SpannableString(text);
+            if (!line.words.isEmpty()) {
+                int offset = 0;
+                for (SpicyApi.Word word : line.words) {
+                    int at = text.indexOf(word.text, offset);
+                    if (at < 0) continue;
+                    if (word.startMs >= 0 && pos >= word.startMs) {
+                        spans.setSpan(new ForegroundColorSpan(Color.WHITE), at,
+                                at + word.text.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                    }
+                    offset = at + word.text.length();
+                }
+            } else if (line.startMs >= 0 && line.endMs > line.startMs) {
+                float fraction = (pos - line.startMs) / (float) (line.endMs - line.startMs);
+                int lit = Math.round(text.length() * Math.max(0f, Math.min(1f, fraction)));
+                if (lit > 0) {
+                    spans.setSpan(new ForegroundColorSpan(Color.WHITE), 0, lit,
+                            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                }
+            }
+            return spans;
+        }
+
+        private static GradientDrawable circle() {
+            GradientDrawable shape = new GradientDrawable();
+            shape.setShape(GradientDrawable.OVAL);
+            shape.setColor(0x33FFFFFF);
+            return shape;
         }
 
         private void applyColor(int raw) {
@@ -390,16 +429,19 @@ public final class NowPlayingLyrics {
         }
 
         private void hideNative() {
-            View host = nativeHost();
-            if (host == null) return;
-            if (nativeCard == null) {
-                nativeCard = host;
-                nativeVisibility = host.getVisibility();
+            View host = nativeCard;
+            if (host != null && host.getParent() != null) {
+                if (host.getVisibility() != GONE) host.setVisibility(GONE);
+                return;
             }
-            if (host.getVisibility() != GONE) host.setVisibility(GONE);
+            host = nativeLyricsItem();
+            if (host == null) return;
+            nativeCard = host;
+            nativeVisibility = host.getVisibility();
+            host.setVisibility(GONE);
         }
 
-        private View nativeHost() {
+        private View nativeLyricsItem() {
             View root = getRootView();
             int id = getContext().getResources().getIdentifier(
                     "widgets_container", "id", getContext().getPackageName());
@@ -408,7 +450,18 @@ public final class NowPlayingLyrics {
             ViewGroup group = (ViewGroup) container;
             for (int i = 0; i < group.getChildCount(); i++) {
                 View child = group.getChildAt(i);
-                if (isRecyclerView(child)) return child;
+                if (!isRecyclerView(child) || !(child instanceof ViewGroup)) continue;
+                ViewGroup recycler = (ViewGroup) child;
+                for (int j = 0; j < recycler.getChildCount(); j++) {
+                    View item = recycler.getChildAt(j);
+                    try {
+                        AccessibilityNodeInfo info = item.createAccessibilityNodeInfo();
+                        java.util.List<AccessibilityNodeInfo> found =
+                                info == null ? null : info.findAccessibilityNodeInfosByText("Lyrics");
+                        if (found != null && !found.isEmpty()) return item;
+                    } catch (Throwable ignored) {
+                    }
+                }
             }
             return null;
         }
