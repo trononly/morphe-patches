@@ -8,9 +8,9 @@ import android.view.View;
 /** Spotify-style share glyph: three linked nodes, drawn rather than an emoji or text arrow. */
 public final class ShareGlyphView extends View {
     private static final float TOUCH_DP = 48f;
-    private static final float GLYPH_DP = 30f;
 
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private float glyphDp = 30f;
 
     public ShareGlyphView(Context context) {
         super(context);
@@ -31,7 +31,7 @@ public final class ShareGlyphView extends View {
 
     @Override
     protected void onDraw(Canvas canvas) {
-        float box = Math.min(dp(GLYPH_DP), Math.min(getWidth(), getHeight()));
+        float box = Math.min(dp(glyphDp), Math.min(getWidth(), getHeight()));
         float left = (getWidth() - box) / 2f;
         float top = (getHeight() - box) / 2f;
         float r = dp(2.6f);
@@ -47,6 +47,11 @@ public final class ShareGlyphView extends View {
         canvas.drawCircle(leftX, midY, r, paint);
         canvas.drawCircle(rightX, bottomY, r, paint);
         paint.setStyle(Paint.Style.STROKE);
+    }
+
+    public void setGlyphSize(float dp) {
+        glyphDp = dp;
+        invalidate();
     }
 
     private float dp(float value) {

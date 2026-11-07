@@ -293,7 +293,7 @@ public final class SpicyLyrics {
         }
     }
 
-    private static boolean enabled(Context context) {
+    static boolean enabled(Context context) {
         return Extensions.isOn(context, Extensions.SPICY_LYRICS)
                 || !Extensions.preferences(context).contains(Extensions.SPICY_LYRICS);
     }
