@@ -47,16 +47,18 @@ public final class SpicyApi {
         public final long startMs;
         public final long endMs;
         public final List<Word> words;
+        public final List<Line> background;
         public final String translated;
         public final String transliterated;
         public final boolean opposite;
 
         Line(String text, long startMs, long endMs, List<Word> words,
-             String translated, String transliterated, boolean opposite) {
+             List<Line> background, String translated, String transliterated, boolean opposite) {
             this.text = text;
             this.startMs = startMs;
             this.endMs = endMs;
             this.words = words;
+            this.background = background;
             this.translated = translated;
             this.transliterated = transliterated;
             this.opposite = opposite;
@@ -175,7 +177,8 @@ public final class SpicyApi {
             JSONObject lead = item.optJSONObject("Lead");
             JSONArray syllables = lead == null ? null : lead.optJSONArray("Syllables");
             if (syllables != null && syllables.length() > 0) {
-                lines.add(parseSyllableLine(item, lead, syllables));
+                lines.add(parseSyllableLine(item, lead, syllables,
+                        parseBackground(item.optJSONArray("Background"))));
             } else {
                 String text = firstText(item, lead);
                 if (text.isEmpty()) continue;
@@ -184,6 +187,7 @@ public final class SpicyApi {
                         millis(firstTime(item, lead, "StartTime")),
                         millis(firstTime(item, lead, "EndTime")),
                         Collections.emptyList(),
+                        parseBackground(item.optJSONArray("Background")),
                         firstString(lead, item, "TranslatedText"),
                         firstString(lead, item, "TransliteratedText"),
                         firstBoolean(item, lead, "OppositeAligned")));
@@ -192,7 +196,8 @@ public final class SpicyApi {
         return lines;
     }
 
-    private static Line parseSyllableLine(JSONObject item, JSONObject lead, JSONArray syllables) {
+    private static Line parseSyllableLine(JSONObject item, JSONObject lead, JSONArray syllables,
+                                          List<Line> background) {
         StringBuilder text = new StringBuilder();
         List<Word> words = new ArrayList<>();
         for (int i = 0; i < syllables.length(); i++) {
@@ -212,9 +217,33 @@ public final class SpicyApi {
         if (start < 0 && !words.isEmpty()) start = words.get(0).startMs;
         if (end < 0 && !words.isEmpty()) end = words.get(words.size() - 1).endMs;
         return new Line(text.toString(), start, end, Collections.unmodifiableList(words),
+                background,
                 lead.optString("TranslatedText", null),
                 lead.optString("TransliteratedText", null),
                 item.optBoolean("OppositeAligned", false));
+    }
+
+    private static List<Line> parseBackground(JSONArray array) {
+        if (array == null) return Collections.emptyList();
+        List<Line> out = new ArrayList<>();
+        for (int i = 0; i < array.length(); i++) {
+            JSONObject item = array.optJSONObject(i);
+            if (item == null) continue;
+            JSONArray syllables = item.optJSONArray("Syllables");
+            if (syllables != null && syllables.length() > 0) {
+                out.add(parseSyllableLine(item, item, syllables, Collections.emptyList()));
+            } else {
+                String text = item.optString("Text", "");
+                if (!text.isEmpty()) {
+                    out.add(new Line(text,
+                            millis(item.optDouble("StartTime", Double.NaN)),
+                            millis(item.optDouble("EndTime", Double.NaN)),
+                            Collections.emptyList(), Collections.emptyList(),
+                            null, null, false));
+                }
+            }
+        }
+        return out;
     }
 
     /** Static responses carry Lines[].Text instead of Content. */
@@ -227,7 +256,8 @@ public final class SpicyApi {
             if (line == null) continue;
             String text = line.optString("Text", "");
             if (!text.isEmpty()) {
-                out.add(new Line(text, -1, -1, Collections.emptyList(), null, null, false));
+                out.add(new Line(text, -1, -1, Collections.emptyList(),
+                        Collections.emptyList(), null, null, false));
             }
         }
         return out;

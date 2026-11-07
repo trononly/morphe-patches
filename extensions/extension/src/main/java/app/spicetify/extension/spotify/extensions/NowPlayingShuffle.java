@@ -15,6 +15,7 @@ public final class NowPlayingShuffle {
     public static void onButton(View button) {
         try {
             button.setOnLongClickListener(NowPlayingShuffle::onLongPress);
+            NowPlayingLyrics.attach(button);
             // TalkBack long-presses with performLongClick, so it would get nothing from a long-press
             // offered while Shuffle+ is off. The framework asks this each time it describes the
             // button, so the switch is read fresh.

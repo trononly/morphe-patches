@@ -101,6 +101,7 @@ public final class LyricsScreen {
 
     private final List<SpicyApi.Line> current = new ArrayList<>();
     private final List<LyricLineView> lineViews = new ArrayList<>();
+    private final List<BackgroundLine> backgroundLines = new ArrayList<>();
     private final List<DotLineView> dotViews = new ArrayList<>();
     private int activeLine = -1;
     private int lastPulseWord = -1;
@@ -410,6 +411,14 @@ public final class LyricsScreen {
         heading.setText(title == null || title.isEmpty() ? "SpicyFaithful" : title);
         artistView.setText(artist == null ? "" : artist);
         this.trackId = trackId;
+        if (scrollAnim != null) {
+            scrollAnim.cancel();
+            scrollAnim = null;
+        }
+        lastScrolledLine = -1;
+        activeLine = -1;
+        scroll.scrollTo(0, 0);
+        scroll.post(() -> scroll.scrollTo(0, 0));
         loadCover(imageUrl);
     }
 
@@ -422,6 +431,7 @@ public final class LyricsScreen {
         scroll.scrollTo(0, 0);
         lastScrollPos = -1;
         lastScrolledLine = -1;
+        activeLine = -1;
         userScrolling = false;
         attribution.setText("");
     }
@@ -451,6 +461,7 @@ public final class LyricsScreen {
         userScrolling = false;
         lines.removeAllViews();
         lineViews.clear();
+        backgroundLines.clear();
         dotViews.clear();
         current.clear();
         current.addAll(lyrics.lines);
@@ -477,6 +488,18 @@ public final class LyricsScreen {
             lines.addView(view, new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
             lineViews.add(view);
+            for (SpicyApi.Line background : line.background) {
+                LyricLineView backgroundView = new LyricLineView(context, background,
+                        textSize * 0.72f, translationSize * 0.72f,
+                        dp(context, 24), 0, dp(context, 8));
+                backgroundView.setVisibility(View.GONE);
+                backgroundView.setLineAlpha(0.8f);
+                SpicyApi.Line backgroundLine = background;
+                backgroundView.setOnClickListener(v -> playbackSeek(backgroundLine.startMs));
+                lines.addView(backgroundView, new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+                backgroundLines.add(new BackgroundLine(backgroundView, background));
+            }
             previousEnd = line.endMs >= 0 ? line.endMs : line.startMs;
         }
         attribution.setText(attribution(lyrics));
@@ -495,7 +518,7 @@ public final class LyricsScreen {
             return;
         }
         long pos = position == null ? -1 : position.positionMs();
-        int initial = 0;
+        int initial = -1;
         if (pos >= 0) {
             for (int i = 0; i < current.size(); i++) {
                 long start = current.get(i).startMs;
@@ -509,6 +532,7 @@ public final class LyricsScreen {
                     : (i < initial ? SUNG_LINE_ALPHA : UPCOMING_LINE_ALPHA));
         }
         activeLine = -1;
+        scroll.post(() -> scroll.scrollTo(0, 0));
         startTicker();
     }
 
@@ -561,6 +585,17 @@ public final class LyricsScreen {
             scrollAnim = null;
         }
         backdrop.setActive(false);
+    }
+
+    private static final class BackgroundLine {
+        final LyricLineView view;
+        final SpicyApi.Line line;
+        boolean visible;
+
+        BackgroundLine(LyricLineView view, SpicyApi.Line line) {
+            this.view = view;
+            this.line = line;
+        }
     }
 
     private static int classify(SpicyApi.Lyrics lyrics) {
@@ -705,7 +740,7 @@ public final class LyricsScreen {
             }
         }
 
-        int active = 0;
+        int active = -1;
         for (int i = 0; i < current.size(); i++) {
             long start = current.get(i).startMs;
             if (start < 0) continue;
@@ -713,11 +748,11 @@ public final class LyricsScreen {
             else break;
         }
 
-        if (inGap) {
+        if (inGap || active < 0) {
             if (activeLine >= 0 && activeLine < lineViews.size()) {
                 lineViews.get(activeLine).setPlayback(pos, false, lyricMode);
-                lineViews.get(activeLine).setLineAlpha(0.5f);
                 activeLine = -1;
+                applyLineEmphasis(-1);
             }
         } else if (active != activeLine) {
             int previous = activeLine;
@@ -729,6 +764,17 @@ public final class LyricsScreen {
             scrollTo(active, pos);
             backdrop.pulse(0.9f);
             lastPulseWord = -1;
+        }
+        for (BackgroundLine background : backgroundLines) {
+            boolean shown = pos >= background.line.startMs && pos <= background.line.endMs;
+            if (shown != background.visible) {
+                background.visible = shown;
+                background.view.setVisibility(shown ? View.VISIBLE : View.GONE);
+            }
+            if (shown) {
+                background.view.setPlayback(pos, true,
+                        background.line.words.isEmpty() ? MODE_LINE : MODE_SYLLABLE);
+            }
         }
         if (!inGap && lyricMode == MODE_SYLLABLE && active >= 0 && active < current.size()) {
             SpicyApi.Line line = current.get(active);
