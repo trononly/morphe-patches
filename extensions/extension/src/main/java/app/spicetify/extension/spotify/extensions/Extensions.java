@@ -9,21 +9,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * The Android side of Spicetify's desktop extensions: ids stable across ports, the desktop
- * extension each one ports, each one's switch and the listener that hears it, and each one's
- * latest status.
- */
 public final class Extensions {
     public static final String TRASH_BIN = "trash_bin";
     public static final String RANDOM_SONG = "random_song";
     public static final String SHUFFLE_PLUS = "shuffle_plus";
     public static final String HIDE_PODCASTS = "hide_podcasts";
+    public static final String SPICY_LYRICS = "spicy_lyrics";
 
-    /**
-     * Each extension on Android: its id, the desktop extension it ports as owner/repo/main, or null
-     * when it has none, its name, and what it does on Android. Spicetify settings lists them in this order.
-     */
     private static final String[][] PORTS = {
         {TRASH_BIN, "spicetify/cli/Extensions/trashbin.js", "Trash Bin",
                 "Throw songs and artists in the trash from their menus, and Spotify skips them."},
@@ -34,14 +26,14 @@ public final class Extensions {
                         + " to play a playlist, album or Liked Songs in a truly random order."},
         {HIDE_PODCASTS, "theRealPadster/spicetify-hide-podcasts/hidePodcasts.js", "Hide podcasts",
                 "Hide podcasts and episodes on Home and in Search, and their filters there and in Your Library."},
+        {SPICY_LYRICS, "spikerko/spicy-lyrics/spicy-lyrics.mjs", "SpicyFaithful",
+                "A faithful Android port of Spicy Lyrics: karaoke highlighting, animated backgrounds and timed lyrics."},
     };
     private static final String PREFERENCES = "spicetify_extensions";
     private static final Map<String, SwitchListener> SWITCHES = new ConcurrentHashMap<>();
     private static final Map<String, String> STATUS = new ConcurrentHashMap<>();
     private static volatile Context appContext;
 
-    // Each extension registers its switch listener in a try of its own, so one that throws can't
-    // stop the others or reach Spotify.
     static {
         try {
             TrashBin.register();
@@ -53,13 +45,13 @@ public final class Extensions {
         } catch (Throwable e) {
             Log.w("Spicetify", "Couldn't register Shuffle+", e);
         }
+        try {
+            SpicyLyrics.register();
+        } catch (Throwable e) {
+            Log.w("Spicetify", "Couldn't register SpicyFaithful", e);
+        }
     }
 
-    /**
-     * Hears extension {@code id} turned on or off. {@link #setOn} calls it on the UI thread, and
-     * {@link #startEnabled} calls it with true on the bridge thread each time Spotify's core starts,
-     * so the two can overlap: a listener should check {@link #isOn} again before it starts anything.
-     */
     interface SwitchListener {
         void onSwitch(Context context, boolean on);
     }
@@ -110,9 +102,21 @@ public final class Extensions {
         return on;
     }
 
+    /** Every extension in settings order, whether on or off. */
+    public static List<String> all() {
+        List<String> ids = new ArrayList<>();
+        for (String[] port : PORTS) ids.add(port[0]);
+        return ids;
+    }
+
     /** Whether the user turned extension {@code id} on; every extension starts off. */
     public static boolean isOn(Context context, String id) {
         return preferences(context).getBoolean(id, false);
+    }
+
+    public static boolean effectiveOn(Context context, String id) {
+        if (SPICY_LYRICS.equals(id)) return SpicyLyrics.enabled(context);
+        return isOn(context, id);
     }
 
     /** Saves the switch, then tells the extension's listener. */
@@ -122,7 +126,6 @@ public final class Extensions {
         if (listener != null) tell(listener, context, on);
     }
 
-    /** Gives extension {@code id} the listener that {@link #setOn} and {@link #startEnabled} call. */
     static void onSwitch(String id, SwitchListener listener) {
         SWITCHES.put(id, listener);
     }
@@ -134,7 +137,6 @@ public final class Extensions {
         }
     }
 
-    /** A failing listener is logged, so it can't undo the switch or stop the other extensions. */
     private static void tell(SwitchListener listener, Context context, boolean on) {
         try {
             listener.onSwitch(context, on);
@@ -143,12 +145,10 @@ public final class Extensions {
         }
     }
 
-    /** The switches, and options such as Hide podcasts' audiobook option. */
     static SharedPreferences preferences(Context context) {
         return context.getApplicationContext().getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE);
     }
 
-    /** Keeps {@code line} as extension {@code id}'s latest status. */
     static void status(String id, String line) {
         STATUS.put(id, line);
     }

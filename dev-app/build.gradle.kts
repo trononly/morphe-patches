@@ -21,6 +21,31 @@ val sharedSources = tasks.register<SharedExtensionSources>("sharedSources") {
     outputDirectory.set(layout.buildDirectory.dir("generated/extension"))
 }
 
+abstract class LyricsBuildConfig : DefaultTask() {
+    @get:Input abstract val apiKey: Property<String>
+    @get:OutputDirectory abstract val outputDirectory: DirectoryProperty
+
+    @TaskAction fun generate() {
+        val file = outputDirectory.get().asFile
+            .resolve("app/spicetify/extension/spotify/BuildConfig.java")
+        file.parentFile.mkdirs()
+        val key = apiKey.get().replace("\\", "\\\\").replace("\"", "\\\"")
+        file.writeText(
+            """
+            package app.spicetify.extension.spotify;
+
+            public final class BuildConfig {
+                public static final String SPICY_LYRICS_KEY = "$key";
+            }
+            """.trimIndent() + "\n"
+        )
+    }
+}
+val lyricsBuildConfig = tasks.register<LyricsBuildConfig>("lyricsBuildConfig") {
+    apiKey.set(providers.gradleProperty("spicyLyrics.key").getOrElse(""))
+    outputDirectory.set(layout.buildDirectory.dir("generated/lyrics-buildconfig"))
+}
+
 android {
     namespace = "app.spicetify.development"
     compileSdk = 36
@@ -41,6 +66,7 @@ androidComponents {
     beforeVariants(selector().withBuildType("release")) { it.enable = false }
     onVariants { variant ->
         variant.sources.java?.addGeneratedSourceDirectory(sharedSources) { it.outputDirectory }
+        variant.sources.java?.addGeneratedSourceDirectory(lyricsBuildConfig) { it.outputDirectory }
     }
 }
 

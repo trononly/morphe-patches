@@ -41,7 +41,7 @@ public final class SpicetifySettingsScreen extends ContextThemeWrapper {
     private final String page;
     private final Dialog dialog;
     private final LinearLayout content;
-    /** This is the root page, which a null or unknown page opens. */
+
     private boolean root;
     private View restartBar;
 
@@ -51,7 +51,6 @@ public final class SpicetifySettingsScreen extends ContextThemeWrapper {
 
     /** Shows a page above the open ones; a null or unknown page is the root. */
     public static void open(Activity activity, String page) {
-        // Showing a dialog on a finishing activity throws, which would crash Spotify.
         if (activity.isFinishing() || activity.isDestroyed()) return;
         track(activity.getApplication());
         SpicetifySettingsScreen screen = new SpicetifySettingsScreen(activity, page);
@@ -91,13 +90,11 @@ public final class SpicetifySettingsScreen extends ContextThemeWrapper {
         }
         dialog.setTitle(title);
         restartBar = SpotifyStyle.restartBar(this, view -> SpotifyRestart.restart(this));
-        // The Marketplace's list scrolls on its own.
         dialog.setContentView(SpotifyStyle.screen(dialog, title, content, restartBar,
                 !PAGE_MARKETPLACE.equals(page) && !PAGE_EXTENSIONS.equals(page)));
         refreshRestartBar();
         dialog.setOnDismissListener(closed -> {
             shown.remove(this);
-            // The page below shows again; refresh it as the activity did when it resumed.
             for (SpicetifySettingsScreen below : shown) below.refresh();
         });
     }
@@ -109,7 +106,6 @@ public final class SpicetifySettingsScreen extends ContextThemeWrapper {
         application.registerActivityLifecycleCallbacks(new Application.ActivityLifecycleCallbacks() {
             @Override public void onActivityCreated(Activity activity, Bundle state) {
                 ArrayList<String> pages = state == null ? null : state.getStringArrayList(OPEN_PAGES);
-                // Reopen them once Spotify has finished creating the new activity.
                 if (pages != null) new Handler(Looper.getMainLooper()).post(() -> {
                     for (String page : pages) open(activity, page);
                 });
@@ -122,7 +118,6 @@ public final class SpicetifySettingsScreen extends ContextThemeWrapper {
             }
 
             @Override public void onActivityDestroyed(Activity activity) {
-                // Close its pages before its windows go, so none of them leaks.
                 for (SpicetifySettingsScreen screen : new ArrayList<>(shown)) {
                     if (screen.activity != activity) continue;
                     shown.remove(screen);
@@ -142,10 +137,6 @@ public final class SpicetifySettingsScreen extends ContextThemeWrapper {
         if (restartBar != null) restartBar.setVisibility(PatchSettings.restartRequired() ? View.VISIBLE : View.GONE);
     }
 
-    /**
-     * The restart bar, on Appearance the theme in use, which the Marketplace above it can change, and
-     * on the root page the extensions that are on, which the Marketplace and their sheets can change.
-     */
     void refresh() {
         refreshRestartBar();
         if (PAGE_APPEARANCE.equals(page)) {
@@ -157,7 +148,6 @@ public final class SpicetifySettingsScreen extends ContextThemeWrapper {
         }
     }
 
-    /** Opens another page above this one. */
     void openPage(String page) {
         open(activity, page);
     }

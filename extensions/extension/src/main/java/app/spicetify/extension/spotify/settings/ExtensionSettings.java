@@ -16,10 +16,6 @@ import app.spicetify.extension.spotify.extensions.ShufflePlus;
 import app.spicetify.extension.spotify.extensions.TrashBin;
 import org.json.JSONException;
 
-/**
- * The extensions on Spicetify settings' root page: each one that is on, with its latest status, and
- * the Marketplace to turn them on. Tapping one opens its sheet: its switch, and its own controls.
- */
 final class ExtensionSettings {
     private ExtensionSettings() {}
 
@@ -32,18 +28,18 @@ final class ExtensionSettings {
             line.setPadding(side, SpotifyStyle.dp(screen, 8), side, 0);
             content.addView(line);
         }
-        for (String id : Extensions.enabled(screen)) {
-            SpotifyStyle.actionRow(content, Extensions.title(id), Extensions.latestStatus(id), view -> open(screen, id));
+        for (String id : Extensions.all()) {
+            boolean on = Extensions.effectiveOn(screen, id);
+            SpotifyStyle.actionRow(content, Extensions.title(id),
+                    on ? Extensions.latestStatus(id) : "Off", view -> open(screen, id));
         }
         SpotifyStyle.actionRow(content, "Spicetify Marketplace", "Turn extensions on in its Extensions tab",
                 view -> screen.openPage(SpicetifySettingsScreen.PAGE_EXTENSIONS));
     }
 
-    /** Extension {@code id}'s sheet. Closing it brings the root page up to date. */
     static void open(SpicetifySettingsScreen screen, String id) {
         LinearLayout rows = SpotifyStyle.column(screen);
-        boolean on = Extensions.isOn(screen, id);
-        // Rows that only work while the extension is on show only while its switch is.
+        boolean on = Extensions.effectiveOn(screen, id);
         LinearLayout whileOn = SpotifyStyle.column(screen);
         whileOn.setVisibility(on ? View.VISIBLE : View.GONE);
         SpotifyStyle.toggleRow(rows, Extensions.title(id), on ? Extensions.latestStatus(id) : "Off", on, (button, checked) -> {
@@ -77,7 +73,6 @@ final class ExtensionSettings {
         sheet.show();
     }
 
-    /** Trash Bin's Export, Import and Clear. After an export, {@code exported} says what was copied. */
     private static void trashBin(SpicetifySettingsScreen screen, LinearLayout controls, String exported) {
         controls.removeAllViews();
         String trash = count(TrashBin.songCount(screen), "song") + " and " + count(TrashBin.artistCount(screen), "artist");
@@ -112,7 +107,6 @@ final class ExtensionSettings {
                     try {
                         TrashBin.importJson(screen, list.getText().toString());
                     } catch (JSONException | StackOverflowError notAList) {
-                        // StackOverflowError: a paste nested deeper than the parser's stack.
                         // Android shows an error's message only on a focused field.
                         list.requestFocus();
                         list.setError("That isn't an exported trash list.");

@@ -57,9 +57,9 @@ public class EsperantoTest {
     // ---- Request builders ----
 
     @Test
-    public void getStateAsksForNoTracksBeforeOrAfterTheCurrentOne() {
-        // prev_tracks_cap{value 0}, next_tracks_cap{value 0}
-        assertArrayEquals(new byte[] {0x0a, 0x02, 0x08, 0x00, 0x12, 0x02, 0x08, 0x00}, Esperanto.getState());
+    public void getStateAsksForNoPreviousTracksAndOneNextTrackForPrefetch() {
+        // prev_tracks_cap{value 0}, next_tracks_cap{value 1}
+        assertArrayEquals(new byte[] {0x0a, 0x02, 0x08, 0x00, 0x12, 0x02, 0x08, 0x01}, Esperanto.getState());
     }
 
     @Test

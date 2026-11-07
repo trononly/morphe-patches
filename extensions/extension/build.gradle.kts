@@ -4,7 +4,12 @@ extension {
 
 android {
     namespace = "app.spicetify.extension.spotify"
-    defaultConfig.minSdk = 24
+    buildFeatures { buildConfig = true }
+    defaultConfig {
+        minSdk = 24
+        val spicyKey = providers.gradleProperty("spicyLyrics.key").getOrElse("")
+        buildConfigField("String", "SPICY_LYRICS_KEY", "\"${spicyKey.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
+    }
     testOptions.unitTests.isIncludeAndroidResources = true
 }
 

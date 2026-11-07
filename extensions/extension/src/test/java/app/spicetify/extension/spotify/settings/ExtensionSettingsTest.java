@@ -115,7 +115,9 @@ public class ExtensionSettingsTest {
             Dialog rootPage = ShadowDialog.getLatestDialog();
             View root = rootPage.getWindow().getDecorView();
             assertTrue(visibleTexts(root).contains("Extensions"));
-            assertNull(row(root, "Trash Bin"));
+            View trashRow = row(root, "Trash Bin");
+            assertNotNull(trashRow);
+            assertEquals(java.util.Arrays.asList("Trash Bin", "Off"), visibleTexts(trashRow));
             assertFalse(visibleTexts(root).contains("No configurable Spicetify patches are installed."));
 
             row(root, "Spicetify Marketplace").performClick();
@@ -206,7 +208,9 @@ public class ExtensionSettingsTest {
 
             button(view, "Close").performClick();
             idle();
-            assertNull(row(root, "Trash Bin"));
+            View trashRow = row(root, "Trash Bin");
+            assertNotNull(trashRow);
+            assertEquals(java.util.Arrays.asList("Trash Bin", "Off"), visibleTexts(trashRow));
         }
     }
 
