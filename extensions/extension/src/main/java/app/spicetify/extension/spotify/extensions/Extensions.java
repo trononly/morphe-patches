@@ -26,8 +26,8 @@ public final class Extensions {
                         + " to play a playlist, album or Liked Songs in a truly random order."},
         {HIDE_PODCASTS, "theRealPadster/spicetify-hide-podcasts/hidePodcasts.js", "Hide podcasts",
                 "Hide podcasts and episodes on Home and in Search, and their filters there and in Your Library."},
-        {SPICY_LYRICS, "spikerko/spicy-lyrics/spicy-lyrics.mjs", "Spicy Lyrics",
-                "Word-by-word karaoke lyrics with animated backgrounds, romanization and translations."},
+        {SPICY_LYRICS, "spikerko/spicy-lyrics/spicy-lyrics.mjs", "SpicyFaithful",
+                "A faithful Android port of Spicy Lyrics: karaoke highlighting, animated backgrounds and timed lyrics."},
     };
     private static final String PREFERENCES = "spicetify_extensions";
     private static final Map<String, SwitchListener> SWITCHES = new ConcurrentHashMap<>();
@@ -48,7 +48,7 @@ public final class Extensions {
         try {
             SpicyLyrics.register();
         } catch (Throwable e) {
-            Log.w("Spicetify", "Couldn't register Spicy Lyrics", e);
+            Log.w("Spicetify", "Couldn't register SpicyFaithful", e);
         }
     }
 

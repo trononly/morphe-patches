@@ -1,6 +1,7 @@
 package app.spicetify.extension.spotify.lyrics;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.app.Dialog;
 import android.content.Context;
 import android.graphics.Bitmap;
@@ -18,6 +19,7 @@ import android.text.style.URLSpan;
 import android.util.Log;
 import android.util.TypedValue;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
@@ -27,6 +29,7 @@ import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
+import android.widget.Switch;
 import android.widget.TextView;
 
 import java.io.InputStream;
@@ -63,6 +66,7 @@ public final class LyricsScreen {
     private static final int MODE_LINE = 1;
     private static final int MODE_SYLLABLE = 2;
 
+    private static final float ACTIVE_LINE_SCALE = 1.05f;
     private static final long INTERLUDE_GAP_MS = 3000;
     private static final float SUNG_LINE_ALPHA = 0.497f;
     private static final float UPCOMING_LINE_ALPHA = 0.51f;
@@ -169,7 +173,7 @@ public final class LyricsScreen {
         titles.setOrientation(LinearLayout.VERTICAL);
         titles.setGravity(Gravity.CENTER);
         heading = new TextView(activity);
-        heading.setText(title == null || title.isEmpty() ? "Spicy Lyrics" : title);
+        heading.setText(title == null || title.isEmpty() ? "SpicyFaithful" : title);
         heading.setTextColor(PRIMARY);
         heading.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
         heading.setTypeface(boldFace);
@@ -212,12 +216,27 @@ public final class LyricsScreen {
         scroll.setVerticalScrollBarEnabled(false);
         scroll.setOverScrollMode(View.OVER_SCROLL_NEVER);
         scroll.setOnTouchListener((v, event) -> {
-            userScrolling = true;
+            int action = event.getActionMasked();
+            if (action == MotionEvent.ACTION_DOWN) {
+                userScrolling = true;
+            } else if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+                userScrolling = false;
+                lastScrolledLine = -1;
+            }
             return false;
         });
         lines = new LinearLayout(activity);
         lines.setOrientation(LinearLayout.VERTICAL);
-        lines.setPadding(0, dp(activity, 24), 0, dp(activity, 24));
+        scroll.addOnLayoutChangeListener((v, left, top, right, bottom,
+                                          oldLeft, oldTop, oldRight, oldBottom) -> {
+            int viewport = bottom - top;
+            if (viewport <= 0) return;
+            int pad = viewport / 2;
+            if (lines.getPaddingTop() != pad || lines.getPaddingBottom() != pad) {
+                lines.setPadding(0, pad, 0, pad);
+                lastScrolledLine = -1;
+            }
+        });
         scroll.addView(lines, new ScrollView.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         content.addView(scroll, new LinearLayout.LayoutParams(
@@ -250,6 +269,7 @@ public final class LyricsScreen {
         more.setTextColor(PRIMARY);
         more.setGravity(Gravity.CENTER);
         more.setContentDescription("More");
+        more.setOnClickListener(v -> showOptions());
         shareRow.addView(more, new LinearLayout.LayoutParams(dp(activity, 48), dp(activity, 48)));
         footer.addView(shareRow);
 
@@ -394,7 +414,7 @@ public final class LyricsScreen {
     }
 
     public void setTrack(String title, String artist, String imageUrl, String trackId) {
-        heading.setText(title == null || title.isEmpty() ? "Spicy Lyrics" : title);
+        heading.setText(title == null || title.isEmpty() ? "SpicyFaithful" : title);
         artistView.setText(artist == null ? "" : artist);
         this.trackId = trackId;
         loadCover(imageUrl);
@@ -596,6 +616,9 @@ public final class LyricsScreen {
         for (int i = 0; i < lineViews.size(); i++) {
             LyricLineView view = lineViews.get(i);
             view.animate().cancel();
+            float scale = lyricMode != MODE_STATIC && i == active ? ACTIVE_LINE_SCALE : 1f;
+            view.setScaleX(scale);
+            view.setScaleY(scale);
             if (lyricMode == MODE_STATIC || i == active) {
                 view.setLineAlpha(1f);
             } else if (i < active) {
@@ -728,11 +751,7 @@ public final class LyricsScreen {
             if (viewport <= 0) return;
             int center = view.getTop() + view.getHeight() / 2;
             int relative = center - scroll.getScrollY();
-            if (userScrolling) {
-                if (relative < viewport * 0.35 || relative > viewport * 0.65) return;
-                userScrolling = false;
-                return;
-            }
+            if (userScrolling) return;
             if (relative >= viewport * 0.35 && relative <= viewport * 0.65) return;
             int y = Math.max(0, (int) (center - viewport * 0.5));
             if (Math.abs(y - scroll.getScrollY()) < dp(scroll.getContext(), 8)) {
@@ -754,6 +773,53 @@ public final class LyricsScreen {
         scrollAnim.setInterpolator(new android.view.animation.PathInterpolator(0.22f, 1f, 0.36f, 1f));
         scrollAnim.addUpdateListener(a -> scroll.scrollTo(0, (Integer) a.getAnimatedValue()));
         scrollAnim.start();
+    }
+
+    private void showOptions() {
+        Context context = dialog.getContext();
+        LinearLayout panel = new LinearLayout(context);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        int pad = dp(context, 20);
+        panel.setPadding(pad, dp(context, 8), pad, dp(context, 8));
+
+        Switch background = new Switch(context);
+        background.setText("Performance background");
+        background.setChecked(LyricsSettings.performanceMode(context));
+        background.setOnCheckedChangeListener((button, checked) ->
+                LyricsSettings.setPerformanceMode(context, checked));
+        panel.addView(background);
+
+        TextView dotsLabel = new TextView(context);
+        dotsLabel.setPadding(0, dp(context, 16), 0, 0);
+        dotsLabel.setText(dotLabel(LyricsSettings.dotScale(context)));
+        panel.addView(dotsLabel);
+
+        android.widget.SeekBar dots = new android.widget.SeekBar(context);
+        dots.setMax(200);
+        dots.setProgress(Math.round((LyricsSettings.dotScale(context) - 0.5f) * 100));
+        dots.setOnSeekBarChangeListener(new android.widget.SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(android.widget.SeekBar bar, int progress, boolean fromUser) {
+                float value = 0.5f + progress / 100f;
+                LyricsSettings.setDotScale(context, value);
+                dotsLabel.setText(dotLabel(value));
+            }
+
+            @Override public void onStartTrackingTouch(android.widget.SeekBar bar) {}
+
+            @Override public void onStopTrackingTouch(android.widget.SeekBar bar) {}
+        });
+        panel.addView(dots, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        new AlertDialog.Builder(context, android.R.style.Theme_Material_Dialog_NoActionBar)
+                .setTitle("SpicyFaithful")
+                .setView(panel)
+                .setNegativeButton("Close", null)
+                .show();
+    }
+
+    private static String dotLabel(float scale) {
+        return "Interlude dot size: " + String.format(Locale.US, "%.1f", scale);
     }
 
     private void loadCover(String imageUrl) {

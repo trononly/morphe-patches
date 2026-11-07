@@ -185,7 +185,7 @@ public final class SpicyLyrics {
                 if (containsLyricsRoute(intent.getExtras(), 0)) return true;
             } catch (Throwable ignored) {
             }
-            return lyricsMode || hasVisibleScreen();
+            return hasVisibleScreen();
         }
         return false;
     }
@@ -276,7 +276,7 @@ public final class SpicyLyrics {
     static void start(Context context) {
         PlaybackBroadcast.start(context);
         if (BuildConfig.SPICY_LYRICS_KEY == null || BuildConfig.SPICY_LYRICS_KEY.trim().isEmpty()) {
-            Log.w(TAG, "No Spicy Lyrics API key compiled in; build with -PspicyLyrics.key=sl_pk_...");
+            Log.w(TAG, "No SpicyFaithful API key compiled in; build with -PspicyLyrics.key=sl_pk_...");
         }
     }
 

@@ -31,7 +31,7 @@ public final class LyricLineView extends View {
     private static final float FILL_LEAD_OFFSET = -0.2f;
     private static final float FILL_SOFT_EDGE = 0.20f;
     private static final float FILL_INNER_EDGE = 0.10f;
-    private static final int BRIGHT = 0xD9FFFFFF;
+    private static final int BRIGHT = 0xFFFFFFFF;
     private static final int DIM_WORD = 0x80FFFFFF;
     private static final int DIM_LINE = 0x59FFFFFF;
     private static final int INACTIVE = 0xB3FFFFFF;
@@ -249,20 +249,20 @@ public final class LyricLineView extends View {
         float stop = Math.max(0f, Math.min(1f, fraction));
         if (stop >= 1f) {
             leadPaint.setColor(BRIGHT);
-            leadPaint.setShadowLayer(6f, 0, 0, 0x40FFFFFF);
             leadLayout.draw(canvas);
-            leadPaint.setShadowLayer(0, 0, 0, 0);
             return;
         }
         float from = Math.max(0.0001f, stop);
         float edge = Math.min(0.9999f, stop + 0.20f);
         if (edge <= from) edge = Math.min(0.9999f, from + 0.0001f);
         LinearGradient gradient = new LinearGradient(0, 0, 0, height,
-                new int[] {0xD9FFFFFF, 0xD9FFFFFF, 0x59FFFFFF, 0x59FFFFFF},
+                new int[] {BRIGHT, BRIGHT, DIM_LINE, DIM_LINE},
                 new float[] {0f, from, edge, 1f}, Shader.TileMode.CLAMP);
         leadPaint.setShader(gradient);
         leadPaint.setColor(Color.WHITE);
-        leadPaint.setShadowLayer(6f, 0, 0, 0x40FFFFFF);
+        float glow = (float) Math.sin(Math.PI * stop);
+        leadPaint.setShadowLayer(4f + 8f * glow, 0, 0,
+                ((int) (0x80 * glow) << 24) | 0xFFFFFF);
         leadLayout.draw(canvas);
         leadPaint.setShader(null);
         leadPaint.setShadowLayer(0, 0, 0, 0);

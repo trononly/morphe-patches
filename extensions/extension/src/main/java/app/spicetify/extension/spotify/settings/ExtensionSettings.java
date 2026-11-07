@@ -14,7 +14,6 @@ import app.spicetify.extension.spotify.extensions.PlayerBridge;
 import app.spicetify.extension.spotify.extensions.RandomSong;
 import app.spicetify.extension.spotify.extensions.ShufflePlus;
 import app.spicetify.extension.spotify.extensions.TrashBin;
-import app.spicetify.extension.spotify.lyrics.LyricsSettings;
 import org.json.JSONException;
 
 final class ExtensionSettings {
@@ -65,36 +64,6 @@ final class ExtensionSettings {
             SpotifyStyle.toggleRow(rows, "Also hide audiobooks",
                     "Hide audiobooks on Home and in Search, and the Books and Authors filters in Your Library.",
                     HidePodcasts.audiobooksHidden(screen), (button, hidden) -> HidePodcasts.setAudiobooksHidden(screen, hidden));
-        }
-        if (Extensions.SPICY_LYRICS.equals(id)) {
-            SpotifyStyle.toggleRow(rows, "Performance background",
-                    "Single colour instead of the drifting three-colour wash.",
-                    LyricsSettings.performanceMode(screen),
-                    (button, checked) -> LyricsSettings.setPerformanceMode(screen, checked));
-            LinearLayout dots = SpotifyStyle.column(screen);
-            TextView label = SpotifyStyle.body(screen,
-                    "Interlude dot size: " + String.format(java.util.Locale.US, "%.1f", LyricsSettings.dotScale(screen)));
-            label.setPadding(SpotifyStyle.dp(screen, 16), SpotifyStyle.dp(screen, 8),
-                    SpotifyStyle.dp(screen, 16), 0);
-            dots.addView(label);
-            android.widget.SeekBar bar = new android.widget.SeekBar(screen);
-            bar.setMax(200);
-            bar.setProgress(Math.round((LyricsSettings.dotScale(screen) - 0.5f) * 100));
-            bar.setOnSeekBarChangeListener(new android.widget.SeekBar.OnSeekBarChangeListener() {
-                @Override public void onProgressChanged(android.widget.SeekBar seekBar, int progress, boolean fromUser) {
-                    float value = 0.5f + progress / 100f;
-                    LyricsSettings.setDotScale(screen, value);
-                    label.setText("Interlude dot size: "
-                            + String.format(java.util.Locale.US, "%.1f", value));
-                }
-
-                @Override public void onStartTrackingTouch(android.widget.SeekBar seekBar) {}
-
-                @Override public void onStopTrackingTouch(android.widget.SeekBar seekBar) {}
-            });
-            dots.addView(bar, new LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
-            rows.addView(dots);
         }
         rows.addView(whileOn);
         SpotifySheet sheet = new SpotifySheet(screen, Extensions.title(id), Extensions.description(id));

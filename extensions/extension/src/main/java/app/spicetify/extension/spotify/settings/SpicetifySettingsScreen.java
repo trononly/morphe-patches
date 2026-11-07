@@ -12,7 +12,6 @@ import android.view.ViewGroup;
 import android.text.TextUtils;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import app.spicetify.extension.spotify.extensions.SpicyLyrics;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -172,9 +171,6 @@ public final class SpicetifySettingsScreen extends ContextThemeWrapper {
                 InstalledPatches.serverFiles() ? List.of("WebDAV", "Jellyfin") : List.of(), PAGE_SERVER);
         if (InstalledPatches.extensions()) {
             any = true;
-            SpotifyStyle.categoryRow(content, "encore_icon_edit_24", "Spicy Lyrics",
-                    "Open synced lyrics for the current track",
-                    view -> SpicyLyrics.open(activity));
             ExtensionSettings.build(this, content);
         }
         if (!any) {
