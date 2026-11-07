@@ -214,6 +214,8 @@ public final class LyricsScreen {
         scroll.setFillViewport(true);
         scroll.setClipToPadding(false);
         scroll.setVerticalScrollBarEnabled(false);
+        scroll.setVerticalFadingEdgeEnabled(true);
+        scroll.setFadingEdgeLength(dp(activity, 48));
         scroll.setOverScrollMode(View.OVER_SCROLL_NEVER);
         scroll.setOnTouchListener((v, event) -> {
             int action = event.getActionMasked();
@@ -227,16 +229,7 @@ public final class LyricsScreen {
         });
         lines = new LinearLayout(activity);
         lines.setOrientation(LinearLayout.VERTICAL);
-        scroll.addOnLayoutChangeListener((v, left, top, right, bottom,
-                                          oldLeft, oldTop, oldRight, oldBottom) -> {
-            int viewport = bottom - top;
-            if (viewport <= 0) return;
-            int pad = viewport / 2;
-            if (lines.getPaddingTop() != pad || lines.getPaddingBottom() != pad) {
-                lines.setPadding(0, pad, 0, pad);
-                lastScrolledLine = -1;
-            }
-        });
+        lines.setPadding(0, dp(activity, 24), 0, dp(activity, 24));
         scroll.addView(lines, new ScrollView.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         content.addView(scroll, new LinearLayout.LayoutParams(
