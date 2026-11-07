@@ -350,6 +350,7 @@ public final class PlayerBridge {
     /** Called with {@link #LOCK} held. It forgets the last state too, since the track can now change unseen. */
     private static void closeStream() {
         lastState = null;
+        lastStateAtElapsed = -1;
         Stream closing = stream;
         if (closing == null) return;
         stream = null;

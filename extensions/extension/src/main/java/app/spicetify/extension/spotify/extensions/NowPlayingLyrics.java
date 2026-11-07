@@ -12,6 +12,7 @@ import android.graphics.drawable.GradientDrawable;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.TextUtils;
+import android.util.Log;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
@@ -24,6 +25,7 @@ import app.spicetify.extension.spotify.lyrics.LyricsCache;
 import app.spicetify.extension.spotify.lyrics.ShareGlyphView;
 import app.spicetify.extension.spotify.lyrics.SpicyApi;
 import java.io.InputStream;
+import java.lang.ref.WeakReference;
 import java.net.URL;
 import java.util.Map;
 import java.util.WeakHashMap;
@@ -50,11 +52,13 @@ public final class NowPlayingLyrics {
 
     private static void startSupervisor(View button) {
         if (SUPERVISORS.containsKey(button)) return;
+        WeakReference<View> reference = new WeakReference<>(button);
         Runnable[] loop = new Runnable[1];
         loop[0] = () -> {
-            if (!button.isAttachedToWindow()) return;
-            install(button, 0);
-            button.postDelayed(loop[0], 1000);
+            View view = reference.get();
+            if (view == null || !view.isAttachedToWindow()) return;
+            install(view);
+            view.postDelayed(loop[0], 1000);
         };
         SUPERVISORS.put(button, loop[0]);
         button.post(loop[0]);
@@ -65,7 +69,8 @@ public final class NowPlayingLyrics {
         if (loop != null) button.removeCallbacks(loop);
     }
 
-    private static void install(View button, int attempt) {
+    private static void install(View button) {
+        if (!button.isAttachedToWindow()) return;
         View root = button.getRootView();
         Context context = button.getContext();
         int id = context.getResources().getIdentifier(
@@ -73,7 +78,6 @@ public final class NowPlayingLyrics {
         View found = id == 0 ? null : root.findViewById(id);
         if (!(found instanceof LinearLayout)
                 || ((LinearLayout) found).getOrientation() != LinearLayout.VERTICAL) {
-            if (attempt < 4) button.postDelayed(() -> install(button, attempt + 1), 300);
             return;
         }
         LinearLayout container = (LinearLayout) found;
@@ -84,13 +88,11 @@ public final class NowPlayingLyrics {
         }
         if (container.findViewWithTag(TAG) != null) return;
         PreviewCard card = new PreviewCard(context);
-        card.nativeCard = findNativeCard(root);
         card.setTag(TAG);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        params.setMargins(dp(context, 14), dp(context, 8), dp(context, 14), dp(context, 8));
+        params.setMargins(0, dp(context, 8), 0, dp(context, 8));
         container.addView(card, 0, params);
-        if (card.nativeCard != null) card.matchNativeWidth();
     }
 
     private static int dp(Context context, int value) {
@@ -113,10 +115,13 @@ public final class NowPlayingLyrics {
         private SpicyApi.Lyrics lyrics;
         private String trackId;
         private View nativeCard;
+        private int nativeVisibility = View.VISIBLE;
         private boolean visible;
         private int albumColor = 0xFF101010;
         private int lastActive = -1;
         private GradientDrawable cardBackground;
+        private android.animation.ValueAnimator colorAnim;
+        private String colorUrl;
 
         PreviewCard(Context context) {
             super(context);
@@ -174,39 +179,60 @@ public final class NowPlayingLyrics {
         @Override
         protected void onDetachedFromWindow() {
             handler.removeCallbacks(tick);
+            if (colorAnim != null) colorAnim.cancel();
             restoreNative();
             super.onDetachedFromWindow();
         }
 
         private void onTick() {
-            if (!isAttachedToWindow()) return;
+            try {
+                if (!isAttachedToWindow()) return;
+                onTickBody();
+            } catch (Throwable e) {
+                Log.w(TAG, "Now Playing lyrics preview tick failed", e);
+            } finally {
+                if (isAttachedToWindow()) handler.postDelayed(tick, 200);
+            }
+        }
+
+        private void onTickBody() {
             Esperanto.PlayerState state = PlayerBridge.lastState();
-            String uri = state == null ? null : state.trackUri;
-            if (uri == null) uri = PlaybackBroadcast.trackUri();
+            long stateAt = PlayerBridge.lastStateAtElapsed();
+            long broadcastAt = PlaybackBroadcast.trackUriAtElapsed();
+            String uri;
+            if (broadcastAt > stateAt) {
+                uri = PlaybackBroadcast.trackUri();
+            } else if (state != null) {
+                uri = state.trackUri;
+            } else {
+                uri = broadcastAt > 0 ? PlaybackBroadcast.trackUri() : null;
+            }
             String id = uri != null && uri.startsWith("spotify:track:")
                     ? uri.substring("spotify:track:".length()) : null;
             if (!TextUtils.equals(id, trackId)) {
                 trackId = id;
                 lyrics = null;
                 lastActive = -1;
-                show(false);
-                if (id != null) {
+                if (id == null) {
+                    show(false);
+                } else {
+                    beginLoading();
                     fetch(id);
-                    loadColor(state);
                 }
             }
+            if (id != null) ensureColor(id, state);
+            if (visible) hideNative();
             if (lyrics != null && lyrics.lines != null && !lyrics.lines.isEmpty()) {
                 render(SpicyLyrics.positionMs());
             }
-            handler.postDelayed(tick, 200);
         }
 
         private void fetch(String id) {
             final String wanted = id;
-            new Thread(() -> {
+            final Context context = getContext().getApplicationContext();
+            Thread thread = new Thread(() -> {
                 SpicyApi.Lyrics result = null;
                 try {
-                    Context context = getContext().getApplicationContext();
                     result = LyricsCache.get(context, wanted);
                     if (result == null) {
                         String raw = SpicyApi.fetchRaw(wanted, BuildConfig.SPICY_LYRICS_KEY);
@@ -221,12 +247,26 @@ public final class NowPlayingLyrics {
                 }
                 final SpicyApi.Lyrics loaded = result;
                 post(() -> {
-                    if (!wanted.equals(trackId)) return;
+                    if (!isAttachedToWindow() || !wanted.equals(trackId)) return;
                     lyrics = loaded;
                     show(loaded != null && loaded.lines != null && !loaded.lines.isEmpty());
                     if (lyrics != null) render(SpicyLyrics.positionMs());
                 });
-            }, "SpicyFaithful preview fetch").start();
+            }, "SpicyFaithful preview fetch");
+            thread.setDaemon(true);
+            thread.start();
+        }
+
+        private void beginLoading() {
+            visible = true;
+            setVisibility(VISIBLE);
+            setAlpha(1f);
+            hideNative();
+            for (TextView line : lines) line.setVisibility(GONE);
+            lines[0].setVisibility(VISIBLE);
+            lines[0].setText("Loading lyrics…");
+            lines[0].setTextColor(0x99FFFFFF);
+            lines[0].setTypeface(Typeface.DEFAULT);
         }
 
         private void render(long pos) {
@@ -256,42 +296,55 @@ public final class NowPlayingLyrics {
             }
         }
 
-        private void applyColor(int color) {
+        private void applyColor(int raw) {
+            int base = darken(raw, 0.55f);
+            int end = darken(raw, 0.30f);
             if (cardBackground == null) {
                 cardBackground = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
-                        new int[] {color, darken(color)});
+                        new int[] {base, end});
                 cardBackground.setCornerRadius(dp(getContext(), 16));
                 cardBackground.setStroke(dp(getContext(), 1), 0x22FFFFFF);
                 setBackground(cardBackground);
             } else {
-                cardBackground.setColors(new int[] {color, darken(color)});
+                cardBackground.setColors(new int[] {base, end});
             }
         }
 
-        private void loadColor(Esperanto.PlayerState state) {
-            String url = state == null ? null : state.imageUrl();
-            if (url == null || url.isEmpty()) return;
+        private void ensureColor(String id, Esperanto.PlayerState state) {
+            if (state == null || state.trackUri == null || !state.trackUri.endsWith(id)) return;
+            String url = state.imageUrl();
+            if (url == null || url.isEmpty() || url.equals(colorUrl)) return;
+            colorUrl = url;
             if (url.startsWith("spotify:image:")) {
                 url = "https://i.scdn.co/image/" + url.substring("spotify:image:".length());
             }
+            final String wanted = id;
             final String imageUrl = url;
-            new Thread(() -> {
+            Thread thread = new Thread(() -> {
                 int color = averageColor(imageUrl);
                 if (color != 0) post(() -> {
+                    if (!wanted.equals(trackId)) return;
+                    if (colorAnim != null) colorAnim.cancel();
                     int from = albumColor;
                     albumColor = color;
-                    android.animation.ValueAnimator animator =
-                            android.animation.ValueAnimator.ofArgb(from, color);
-                    animator.setDuration(450);
-                    animator.addUpdateListener(a ->
+                    colorAnim = android.animation.ValueAnimator.ofArgb(from, color);
+                    colorAnim.setDuration(450);
+                    colorAnim.addUpdateListener(a ->
                             applyColor((Integer) a.getAnimatedValue()));
-                    animator.start();
+                    colorAnim.start();
                 });
-            }, "SpicyFaithful preview colour").start();
+            }, "SpicyFaithful preview colour");
+            thread.setDaemon(true);
+            thread.start();
         }
 
         private static int averageColor(String url) {
-            try (InputStream in = new URL(url).openStream()) {
+            try {
+                java.net.HttpURLConnection connection =
+                        (java.net.HttpURLConnection) new URL(url).openConnection();
+                connection.setConnectTimeout(8000);
+                connection.setReadTimeout(8000);
+                try (InputStream in = connection.getInputStream()) {
                 Bitmap bitmap = BitmapFactory.decodeStream(in);
                 if (bitmap == null) return 0;
                 Bitmap small = Bitmap.createScaledBitmap(bitmap, 16, 16, false);
@@ -307,14 +360,16 @@ public final class NowPlayingLyrics {
                 int color = Color.rgb((int) (r / count), (int) (g / count), (int) (b / count));
                 small.recycle();
                 bitmap.recycle();
-                return darken(color);
+                return color;
+                } finally {
+                    connection.disconnect();
+                }
             } catch (Throwable ignored) {
                 return 0;
             }
         }
 
-        private static int darken(int color) {
-            float factor = 0.45f;
+        private static int darken(int color, float factor) {
             return Color.rgb((int) (Color.red(color) * factor),
                     (int) (Color.green(color) * factor),
                     (int) (Color.blue(color) * factor));
@@ -335,31 +390,32 @@ public final class NowPlayingLyrics {
         }
 
         private void hideNative() {
-            if (nativeCard == null) nativeCard = findNativeCard(getRootView());
-            if (nativeCard != null) {
-                matchNativeWidth();
-                nativeCard.setVisibility(GONE);
+            View host = nativeHost();
+            if (host == null) return;
+            if (nativeCard == null) {
+                nativeCard = host;
+                nativeVisibility = host.getVisibility();
             }
+            if (host.getVisibility() != GONE) host.setVisibility(GONE);
         }
 
-        private void matchNativeWidth() {
-            View parent = (View) getParent();
-            if (parent == null) return;
-            Rect area = new Rect();
-            if (!nativeCard.getGlobalVisibleRect(area)) return;
-            int[] location = new int[2];
-            parent.getLocationOnScreen(location);
-            LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) getLayoutParams();
-            params.leftMargin = Math.max(0,
-                    area.left - location[0] - parent.getPaddingLeft());
-            params.rightMargin = Math.max(0,
-                    location[0] + parent.getWidth() - area.right - parent.getPaddingRight());
-            setLayoutParams(params);
+        private View nativeHost() {
+            View root = getRootView();
+            int id = getContext().getResources().getIdentifier(
+                    "widgets_container", "id", getContext().getPackageName());
+            View container = root.findViewById(id);
+            if (!(container instanceof ViewGroup)) return null;
+            ViewGroup group = (ViewGroup) container;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                View child = group.getChildAt(i);
+                if (isRecyclerView(child)) return child;
+            }
+            return null;
         }
 
         private void restoreNative() {
             if (nativeCard != null) {
-                nativeCard.setVisibility(VISIBLE);
+                nativeCard.setVisibility(nativeVisibility);
                 nativeCard = null;
             }
         }
@@ -376,45 +432,12 @@ public final class NowPlayingLyrics {
 
     }
 
-    private static View findNativeCard(View root) {
-        AccessibilityNodeInfo info = root.createAccessibilityNodeInfo();
-        AccessibilityNodeInfo icon = findNode(info, "Open full screen lyrics");
-        if (icon == null) return null;
-        Rect bounds = new Rect();
-        icon.getBoundsInScreen(bounds);
-        View recycler = findRecycler(root);
-        if (!(recycler instanceof ViewGroup)) return null;
-        ViewGroup group = (ViewGroup) recycler;
-        for (int i = 0; i < group.getChildCount(); i++) {
-            View child = group.getChildAt(i);
-            Rect area = new Rect();
-            if (child.getGlobalVisibleRect(area)
-                    && area.contains(bounds.centerX(), bounds.centerY())) {
-                return child;
-            }
+    private static boolean isRecyclerView(View view) {
+        try {
+            Class<?> type = Class.forName("androidx.recyclerview.widget.RecyclerView");
+            return type.isInstance(view);
+        } catch (Throwable ignored) {
+            return false;
         }
-        return null;
-    }
-
-    private static AccessibilityNodeInfo findNode(AccessibilityNodeInfo node, String description) {
-        if (node == null) return null;
-        CharSequence content = node.getContentDescription();
-        if (content != null && description.contentEquals(content)) return node;
-        for (int i = 0; i < node.getChildCount(); i++) {
-            AccessibilityNodeInfo found = findNode(node.getChild(i), description);
-            if (found != null) return found;
-        }
-        return null;
-    }
-
-    private static View findRecycler(View view) {
-        if (view.getClass().getName().contains("RecyclerView")) return view;
-        if (!(view instanceof ViewGroup)) return null;
-        ViewGroup group = (ViewGroup) view;
-        for (int i = 0; i < group.getChildCount(); i++) {
-            View found = findRecycler(group.getChildAt(i));
-            if (found != null) return found;
-        }
-        return null;
     }
 }

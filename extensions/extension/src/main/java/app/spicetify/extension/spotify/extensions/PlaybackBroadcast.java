@@ -27,6 +27,7 @@ public final class PlaybackBroadcast {
     private static long durationMs = -1;
     private static long timeSentWallMs = -1;
     private static long receivedAtElapsed = -1;
+    private static long trackUriAtElapsed = -1;
     private static boolean playing;
     private static boolean valid;
     private static String trackUri;
@@ -76,14 +77,22 @@ public final class PlaybackBroadcast {
 
     static void stop() {
         synchronized (LOCK) {
-            if (receiver == null || appContext == null) return;
-            try {
-                appContext.unregisterReceiver(receiver);
-            } catch (Throwable ignored) {
-                // Already unregistered with the process.
+            if (receiver != null && appContext != null) {
+                try {
+                    appContext.unregisterReceiver(receiver);
+                } catch (Throwable ignored) {
+                    // Already unregistered with the process.
+                }
             }
             receiver = null;
             valid = false;
+            positionMs = -1;
+            receivedAtElapsed = -1;
+            trackUriAtElapsed = -1;
+            trackUri = null;
+            title = null;
+            artist = null;
+            album = null;
         }
     }
 
@@ -127,6 +136,12 @@ public final class PlaybackBroadcast {
     static long lastUpdateElapsed() {
         synchronized (LOCK) {
             return receivedAtElapsed;
+        }
+    }
+
+    static long trackUriAtElapsed() {
+        synchronized (LOCK) {
+            return trackUriAtElapsed;
         }
     }
 
@@ -183,7 +198,10 @@ public final class PlaybackBroadcast {
             if (sent > 0) timeSentWallMs = sent;
             playing = isPlaying;
             receivedAtElapsed = SystemClock.elapsedRealtime();
-            if (uri != null && !uri.isEmpty()) trackUri = uri;
+            if (uri != null && !uri.isEmpty()) {
+                trackUri = uri;
+                trackUriAtElapsed = receivedAtElapsed;
+            }
             if (trackTitle != null) title = trackTitle;
             if (trackArtist != null) artist = trackArtist;
             if (trackAlbum != null) album = trackAlbum;
