@@ -492,8 +492,7 @@ public final class LyricsScreen {
                 LyricLineView backgroundView = new LyricLineView(context, background,
                         textSize * 0.72f, translationSize * 0.72f,
                         dp(context, 24), 0, dp(context, 8));
-                backgroundView.setVisibility(View.GONE);
-                backgroundView.setLineAlpha(0.8f);
+                backgroundView.setLineAlpha(0.35f);
                 SpicyApi.Line backgroundLine = background;
                 backgroundView.setOnClickListener(v -> playbackSeek(backgroundLine.startMs));
                 lines.addView(backgroundView, new LinearLayout.LayoutParams(
@@ -590,7 +589,6 @@ public final class LyricsScreen {
     private static final class BackgroundLine {
         final LyricLineView view;
         final SpicyApi.Line line;
-        boolean visible;
 
         BackgroundLine(LyricLineView view, SpicyApi.Line line) {
             this.view = view;
@@ -767,14 +765,9 @@ public final class LyricsScreen {
         }
         for (BackgroundLine background : backgroundLines) {
             boolean shown = pos >= background.line.startMs && pos <= background.line.endMs;
-            if (shown != background.visible) {
-                background.visible = shown;
-                background.view.setVisibility(shown ? View.VISIBLE : View.GONE);
-            }
-            if (shown) {
-                background.view.setPlayback(pos, true,
-                        background.line.words.isEmpty() ? MODE_LINE : MODE_SYLLABLE);
-            }
+            background.view.setLineAlpha(shown ? 0.8f : 0.35f);
+            background.view.setPlayback(pos, shown,
+                    background.line.words.isEmpty() ? MODE_LINE : MODE_SYLLABLE);
         }
         if (!inGap && lyricMode == MODE_SYLLABLE && active >= 0 && active < current.size()) {
             SpicyApi.Line line = current.get(active);

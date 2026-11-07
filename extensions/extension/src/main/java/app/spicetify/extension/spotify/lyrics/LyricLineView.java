@@ -19,9 +19,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 public final class LyricLineView extends View {
-    static final int MODE_STATIC = 0;
-    static final int MODE_LINE = 1;
-    static final int MODE_SYLLABLE = 2;
+    public static final int MODE_STATIC = 0;
+    public static final int MODE_LINE = 1;
+    public static final int MODE_SYLLABLE = 2;
 
     private static final float GLYPH_OVERHANG = 2f;
     private static final float WORD_SCALE_IDLE = 0.95f;
@@ -36,6 +36,9 @@ public final class LyricLineView extends View {
     private static final int DIM_LINE = 0x59FFFFFF;
     private static final int INACTIVE = 0xFFFFFFFF;
     private static final int OPPOSITE_RGB = 0xFFD9A8;
+    private static final float WORD_GLOW = 7f;
+    private static final float LAST_WORD_GLOW = 9f;
+    private static final int LAST_WORD_GLOW_BOOST = 0x22;
 
     private static Typeface boldTypeface;
     private static Typeface regularTypeface;
@@ -62,7 +65,7 @@ public final class LyricLineView extends View {
         return loaded;
     }
 
-    private final SpicyApi.Line line;
+    private SpicyApi.Line line;
     private final TextPaint leadPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
     private final TextPaint translationPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
     private final int padH;
@@ -75,20 +78,19 @@ public final class LyricLineView extends View {
 
     private float[][][] wordSegments;
 
-    private final String text;
-    private final int[] wordStart;
-    private final int[] wordEnd;
-    private final long[] wordFrom;
-    private final long[] wordTo;
+    private String text = "";
+    private int[] wordStart = new int[0];
+    private int[] wordEnd = new int[0];
+    private long[] wordFrom = new long[0];
+    private long[] wordTo = new long[0];
 
     private long pos = -1;
     private boolean active;
     private int mode = MODE_SYLLABLE;
 
-    LyricLineView(Context context, SpicyApi.Line line, float textSizePx, float translationSizePx,
-                  int padH, int padTop, int padBottom) {
+    public LyricLineView(Context context, SpicyApi.Line line, float textSizePx,
+                         float translationSizePx, int padH, int padTop, int padBottom) {
         super(context);
-        this.line = line;
         this.padH = padH;
         this.padTop = padTop;
         this.padBottom = padBottom;
@@ -98,17 +100,25 @@ public final class LyricLineView extends View {
         translationPaint.setTextSize(translationSizePx);
         translationPaint.setTypeface(font(context, false));
         translationPaint.setColor(tint(0x8CFFFFFF));
+        setLine(line);
+    }
 
+    public void setLine(SpicyApi.Line line) {
+        if (this.line == line) return;
+        this.line = line;
         StringBuilder sb = new StringBuilder();
         List<int[]> ranges = new ArrayList<>();
-        for (int i = 0; i < line.words.size(); i++) {
-            SpicyApi.Word word = line.words.get(i);
-            int start = sb.length();
-            sb.append(word.text);
-            ranges.add(new int[] {start, sb.length()});
-            if (!word.partOfWord && i < line.words.size() - 1) sb.append(' ');
+        if (line != null) {
+            for (int i = 0; i < line.words.size(); i++) {
+                SpicyApi.Word word = line.words.get(i);
+                int start = sb.length();
+                sb.append(word.text);
+                ranges.add(new int[] {start, sb.length()});
+                if (!word.partOfWord && i < line.words.size() - 1) sb.append(' ');
+            }
         }
-        text = line.words.isEmpty() ? line.text : sb.toString();
+        String raw = line == null || line.text == null ? "" : line.text;
+        text = line == null || line.words.isEmpty() ? raw : sb.toString();
         wordStart = new int[ranges.size()];
         wordEnd = new int[ranges.size()];
         wordFrom = new long[ranges.size()];
@@ -120,9 +130,17 @@ public final class LyricLineView extends View {
             wordFrom[i] = word.startMs;
             wordTo[i] = word.endMs;
         }
+        leadLayout = null;
+        translationLayout = null;
+        layoutWidth = -1;
+        wordSegments = null;
+        translationPaint.setColor(tint(0x8CFFFFFF));
+        if (getWidth() > 0) setPivotX(opposite() ? getWidth() - padH : padH);
+        requestLayout();
+        invalidate();
     }
 
-    void setPlayback(long positionMs, boolean isActive, int renderMode) {
+    public void setPlayback(long positionMs, boolean isActive, int renderMode) {
         if (pos == positionMs && active == isActive && mode == renderMode) return;
         pos = positionMs;
         active = isActive;
@@ -130,14 +148,14 @@ public final class LyricLineView extends View {
         invalidate();
     }
 
-    void setLineAlpha(float alpha) {
+    public void setLineAlpha(float alpha) {
         if (getAlpha() != alpha) setAlpha(alpha);
     }
 
     @Override
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
         super.onSizeChanged(w, h, oldw, oldh);
-        setPivotX(line.opposite ? w - padH : padH);
+        setPivotX(opposite() ? w - padH : padH);
         setPivotY(h / 2f);
     }
 
@@ -151,18 +169,19 @@ public final class LyricLineView extends View {
             leadLayout = StaticLayout.Builder
                     .obtain(text, 0, text.length(), leadPaint, inner)
                     .setLineSpacing(dp(4), 1.05f)
-                    .setAlignment(line.opposite
+                    .setAlignment(opposite()
                             ? Layout.Alignment.ALIGN_OPPOSITE : Layout.Alignment.ALIGN_NORMAL)
                     .setBreakStrategy(Layout.BREAK_STRATEGY_SIMPLE)
                     .setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NONE)
                     .build();
             buildGeometry();
             translationLayout = null;
-            if (line.translated != null && !line.translated.isEmpty()) {
+            String translated = line == null ? null : line.translated;
+            if (translated != null && !translated.isEmpty()) {
                 translationLayout = StaticLayout.Builder
-                        .obtain(line.translated, 0, line.translated.length(), translationPaint, inner)
+                        .obtain(translated, 0, translated.length(), translationPaint, inner)
                         .setLineSpacing(dp(2), 1.0f)
-                        .setAlignment(line.opposite
+                        .setAlignment(opposite()
                                 ? Layout.Alignment.ALIGN_OPPOSITE : Layout.Alignment.ALIGN_NORMAL)
                         .build();
             }
@@ -182,7 +201,7 @@ public final class LyricLineView extends View {
         leadPaint.setShadowLayer(0, 0, 0, 0);
 
         if (!active || mode == MODE_STATIC) {
-            boolean sung = line.endMs >= 0 && pos >= line.endMs;
+            boolean sung = line != null && line.endMs >= 0 && pos >= line.endMs;
             leadPaint.setColor(tint(mode == MODE_STATIC || sung ? BRIGHT : INACTIVE));
             leadLayout.draw(canvas);
             canvas.restoreToCount(save);
@@ -190,7 +209,7 @@ public final class LyricLineView extends View {
             return;
         }
 
-        if (mode == MODE_LINE && line.startMs >= 0 && line.endMs > line.startMs) {
+        if (mode == MODE_LINE && line != null && line.startMs >= 0 && line.endMs > line.startMs) {
             float fraction = (pos - line.startMs) / (float) (line.endMs - line.startMs);
             fraction = Math.max(0f, Math.min(1f, fraction));
             drawLineGradient(canvas, fraction);
@@ -228,9 +247,10 @@ public final class LyricLineView extends View {
                     fraction = (pos - start) / (float) (end - start);
                     fraction = Math.max(0f, Math.min(1f, fraction));
                 }
-                drawWord(canvas, wordSegments[i], fraction, i == singingIndex && !complete);
+                drawWord(canvas, wordSegments[i], fraction, i == singingIndex && !complete,
+                        i == wordStart.length - 1);
             }
-        } else if (line.startMs >= 0 && line.endMs > line.startMs) {
+        } else if (line != null && line.startMs >= 0 && line.endMs > line.startMs) {
             float fraction = (pos - line.startMs) / (float) (line.endMs - line.startMs);
             fraction = Math.max(0f, Math.min(1f, fraction));
             drawLineGradient(canvas, fraction);
@@ -240,8 +260,12 @@ public final class LyricLineView extends View {
         drawTranslation(canvas);
     }
 
+    private boolean opposite() {
+        return line != null && line.opposite;
+    }
+
     private int tint(int color) {
-        if (!line.opposite) return color;
+        if (!opposite()) return color;
         return (color & 0xFF000000) | OPPOSITE_RGB;
     }
 
@@ -309,7 +333,8 @@ public final class LyricLineView extends View {
         }
     }
 
-    private void drawWord(Canvas canvas, float[][] segments, float fraction, boolean singing) {
+    private void drawWord(Canvas canvas, float[][] segments, float fraction, boolean singing,
+                          boolean lastWord) {
         if (segments == null || segments.length == 0) return;
         float widthSum = 0f;
         float minX = Float.MAX_VALUE;
@@ -355,6 +380,11 @@ public final class LyricLineView extends View {
         float budget = widthSum * (FILL_LEAD * fraction + FILL_LEAD_OFFSET);
         float consumed = 0f;
         int glow = (int) (0x55 * (1f - fraction));
+        float glowRadius = WORD_GLOW;
+        if (singing && lastWord) {
+            glow = Math.min(0xFF, glow + LAST_WORD_GLOW_BOOST);
+            glowRadius = LAST_WORD_GLOW;
+        }
         for (float[] seg : segments) {
             float width = seg[1] - seg[0];
             float fill = budget - consumed;
@@ -365,7 +395,9 @@ public final class LyricLineView extends View {
                     int layer = canvas.save();
                     canvas.clipRect(seg[0] - 1f, seg[2] - 2f, seg[0] + lit, seg[3] + 2f);
                     leadPaint.setColor(tint(BRIGHT));
-                    if (singing && glow > 0) leadPaint.setShadowLayer(7f, 0, 0, glow << 24);
+                    if (singing && glow > 0) {
+                        leadPaint.setShadowLayer(glowRadius, 0, 0, glow << 24);
+                    }
                     leadLayout.draw(canvas);
                     canvas.restoreToCount(layer);
                 }
@@ -415,7 +447,7 @@ public final class LyricLineView extends View {
         int y = padTop + leadLayout.getHeight() + (int) dp(4);
         canvas.save();
         canvas.translate(padH, y);
-        translationPaint.setColor(0x8CFFFFFF);
+        translationPaint.setColor(tint(0x8CFFFFFF));
         translationLayout.draw(canvas);
         canvas.restore();
     }
