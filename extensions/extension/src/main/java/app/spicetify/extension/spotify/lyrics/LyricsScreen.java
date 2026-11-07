@@ -472,7 +472,7 @@ public final class LyricsScreen {
             }
             final int lineIndex = lineViews.size();
             LyricLineView view = new LyricLineView(context, line, textSize, translationSize,
-                    0, dp(context, 4), dp(context, 20));
+                    dp(context, 24), dp(context, 4), dp(context, 20));
             view.setOnClickListener(v -> onLineTap(lineIndex));
             lines.addView(view, new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -494,6 +494,21 @@ public final class LyricsScreen {
             startTicker();
             return;
         }
+        long pos = position == null ? -1 : position.positionMs();
+        int initial = 0;
+        if (pos >= 0) {
+            for (int i = 0; i < current.size(); i++) {
+                long start = current.get(i).startMs;
+                if (start < 0) continue;
+                if (start <= pos) initial = i;
+                else break;
+            }
+        }
+        for (int i = 0; i < lineViews.size(); i++) {
+            lineViews.get(i).setLineAlpha(i == initial ? 1f
+                    : (i < initial ? SUNG_LINE_ALPHA : UPCOMING_LINE_ALPHA));
+        }
+        activeLine = -1;
         startTicker();
     }
 
@@ -610,15 +625,18 @@ public final class LyricsScreen {
             LyricLineView view = lineViews.get(i);
             view.animate().cancel();
             float scale = lyricMode != MODE_STATIC && i == active ? ACTIVE_LINE_SCALE : 1f;
-            view.setScaleX(scale);
-            view.setScaleY(scale);
+            float alpha;
             if (lyricMode == MODE_STATIC || i == active) {
-                view.setLineAlpha(1f);
+                alpha = 1f;
             } else if (i < active) {
-                view.setLineAlpha(SUNG_LINE_ALPHA);
+                alpha = SUNG_LINE_ALPHA;
             } else {
-                view.setLineAlpha(UPCOMING_LINE_ALPHA);
+                alpha = UPCOMING_LINE_ALPHA;
             }
+            view.animate().alpha(alpha).scaleX(scale).scaleY(scale)
+                    .setDuration(220)
+                    .setInterpolator(new android.view.animation.DecelerateInterpolator())
+                    .start();
         }
     }
 
@@ -745,7 +763,6 @@ public final class LyricsScreen {
             int center = view.getTop() + view.getHeight() / 2;
             int relative = center - scroll.getScrollY();
             if (userScrolling) return;
-            if (relative >= viewport * 0.35 && relative <= viewport * 0.65) return;
             int y = Math.max(0, (int) (center - viewport * 0.5));
             if (Math.abs(y - scroll.getScrollY()) < dp(scroll.getContext(), 8)) {
                 lastScrolledLine = index;
@@ -762,8 +779,8 @@ public final class LyricsScreen {
         int from = scroll.getScrollY();
         if (from == targetY) return;
         scrollAnim = android.animation.ValueAnimator.ofInt(from, targetY);
-        scrollAnim.setDuration(400);
-        scrollAnim.setInterpolator(new android.view.animation.PathInterpolator(0.22f, 1f, 0.36f, 1f));
+        scrollAnim.setDuration(600);
+        scrollAnim.setInterpolator(new android.view.animation.PathInterpolator(0.16f, 1f, 0.3f, 1f));
         scrollAnim.addUpdateListener(a -> scroll.scrollTo(0, (Integer) a.getAnimatedValue()));
         scrollAnim.start();
     }
