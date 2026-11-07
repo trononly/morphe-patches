@@ -133,6 +133,13 @@ public final class LyricLineView extends View {
         if (getAlpha() != alpha) setAlpha(alpha);
     }
 
+    @Override
+    protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+        super.onSizeChanged(w, h, oldw, oldh);
+        setPivotX(padH);
+        setPivotY(h / 2f);
+    }
+
     @SuppressLint("WrongConstant")
     @Override
     protected void onMeasure(int widthSpec, int heightSpec) {
