@@ -32,9 +32,9 @@ public final class LyricLineView extends View {
     private static final float FILL_SOFT_EDGE = 0.20f;
     private static final float FILL_INNER_EDGE = 0.10f;
     private static final int BRIGHT = 0xFFFFFFFF;
-    private static final int DIM_WORD = 0x80FFFFFF;
+    private static final int DIM_WORD = 0x59FFFFFF;
     private static final int DIM_LINE = 0x59FFFFFF;
-    private static final int INACTIVE = 0xB3FFFFFF;
+    private static final int INACTIVE = 0xFFFFFFFF;
 
     private static Typeface boldTypeface;
     private static Typeface regularTypeface;

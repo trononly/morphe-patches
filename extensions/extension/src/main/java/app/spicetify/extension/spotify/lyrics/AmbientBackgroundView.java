@@ -217,11 +217,11 @@ public final class AmbientBackgroundView extends View {
         if (w <= 0 || h <= 0) return;
         canvas.drawColor(Color.BLACK);
         if (current != null && !current.isRecycled()) {
-            float zoom = 1.07f + 0.025f * (float) Math.sin(driftPhase * 0.7);
+            float zoom = 1.07f + 0.025f * (float) Math.sin(driftPhase);
             float scale = (Math.max(w, h) / (float) TEX_SIZE) * zoom;
             matrix.setScale(scale, scale);
-            matrix.postTranslate((w - scale * TEX_SIZE) * 0.5f - 0.05f * w * (float) Math.sin(driftPhase * 1.4f),
-                    (h - scale * TEX_SIZE) * 0.5f + 0.035f * h * (float) Math.cos(driftPhase * 1.1f));
+            matrix.postTranslate((w - scale * TEX_SIZE) * 0.5f - 0.05f * w * (float) Math.sin(driftPhase * 2f),
+                    (h - scale * TEX_SIZE) * 0.5f + 0.035f * h * (float) Math.cos(driftPhase));
             if (previous != null && !previous.isRecycled() && crossfade < 1f) {
                 canvas.drawBitmap(previous, matrix, imagePaint);
                 fadePaint.setAlpha(Math.round(crossfade * 255));
@@ -234,9 +234,9 @@ public final class AmbientBackgroundView extends View {
             float swell = 1f + 0.10f * pulseEnergy;
             for (int i = 0; i < 3; i++) {
                 float cx = w * (0.5f + (0.38f + 0.03f * pulseEnergy)
-                        * (float) Math.sin(driftPhase * 1.1f + i * 2.1f));
+                        * (float) Math.sin(driftPhase + i * 2.1f));
                 float cy = h * (0.5f + (0.30f + 0.03f * pulseEnergy)
-                        * (float) Math.cos(driftPhase * 0.8f + i * 1.7f));
+                        * (float) Math.cos(driftPhase * 2f + i * 1.7f));
                 int save = canvas.save();
                 canvas.translate(cx, cy);
                 blobPaint.setShader(blobs[i]);
@@ -285,7 +285,8 @@ public final class AmbientBackgroundView extends View {
 
     private void startDrift() {
         if (driftAnim != null) return;
-        driftAnim = ValueAnimator.ofFloat(0f, (float) (Math.PI * 2));
+        float start = driftPhase;
+        driftAnim = ValueAnimator.ofFloat(start, start + (float) (Math.PI * 2));
         driftAnim.setDuration(DRIFT_MILLIS);
         driftAnim.setRepeatCount(ValueAnimator.INFINITE);
         driftAnim.setInterpolator(new LinearInterpolator());
