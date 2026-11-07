@@ -35,6 +35,7 @@ public final class LyricLineView extends View {
     private static final int DIM_WORD = 0x59FFFFFF;
     private static final int DIM_LINE = 0x59FFFFFF;
     private static final int INACTIVE = 0xFFFFFFFF;
+    private static final int OPPOSITE_RGB = 0xFFD9A8;
 
     private static Typeface boldTypeface;
     private static Typeface regularTypeface;
@@ -96,7 +97,7 @@ public final class LyricLineView extends View {
         leadPaint.setColor(INACTIVE);
         translationPaint.setTextSize(translationSizePx);
         translationPaint.setTypeface(font(context, false));
-        translationPaint.setColor(0x8CFFFFFF);
+        translationPaint.setColor(tint(0x8CFFFFFF));
 
         StringBuilder sb = new StringBuilder();
         List<int[]> ranges = new ArrayList<>();
@@ -136,7 +137,7 @@ public final class LyricLineView extends View {
     @Override
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
         super.onSizeChanged(w, h, oldw, oldh);
-        setPivotX(padH);
+        setPivotX(line.opposite ? w - padH : padH);
         setPivotY(h / 2f);
     }
 
@@ -150,6 +151,8 @@ public final class LyricLineView extends View {
             leadLayout = StaticLayout.Builder
                     .obtain(text, 0, text.length(), leadPaint, inner)
                     .setLineSpacing(dp(4), 1.05f)
+                    .setAlignment(line.opposite
+                            ? Layout.Alignment.ALIGN_OPPOSITE : Layout.Alignment.ALIGN_NORMAL)
                     .setBreakStrategy(Layout.BREAK_STRATEGY_SIMPLE)
                     .setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NONE)
                     .build();
@@ -159,6 +162,8 @@ public final class LyricLineView extends View {
                 translationLayout = StaticLayout.Builder
                         .obtain(line.translated, 0, line.translated.length(), translationPaint, inner)
                         .setLineSpacing(dp(2), 1.0f)
+                        .setAlignment(line.opposite
+                                ? Layout.Alignment.ALIGN_OPPOSITE : Layout.Alignment.ALIGN_NORMAL)
                         .build();
             }
         }
@@ -178,7 +183,7 @@ public final class LyricLineView extends View {
 
         if (!active || mode == MODE_STATIC) {
             boolean sung = line.endMs >= 0 && pos >= line.endMs;
-            leadPaint.setColor(mode == MODE_STATIC || sung ? BRIGHT : INACTIVE);
+            leadPaint.setColor(tint(mode == MODE_STATIC || sung ? BRIGHT : INACTIVE));
             leadLayout.draw(canvas);
             canvas.restoreToCount(save);
             drawTranslation(canvas);
@@ -208,7 +213,7 @@ public final class LyricLineView extends View {
 
         int baseSave = canvas.save();
         if (singingIndex >= 0) clipOutSegments(canvas, wordSegments[singingIndex]);
-        leadPaint.setColor(mode == MODE_SYLLABLE ? DIM_WORD : DIM_LINE);
+        leadPaint.setColor(tint(mode == MODE_SYLLABLE ? DIM_WORD : DIM_LINE));
         leadLayout.draw(canvas);
         canvas.restoreToCount(baseSave);
 
@@ -235,6 +240,11 @@ public final class LyricLineView extends View {
         drawTranslation(canvas);
     }
 
+    private int tint(int color) {
+        if (!line.opposite) return color;
+        return (color & 0xFF000000) | OPPOSITE_RGB;
+    }
+
     private static float wordScale(float fraction) {
         float t = Math.max(0f, Math.min(1f, fraction));
         if (t <= WORD_SCALE_RISE_END) {
@@ -255,7 +265,7 @@ public final class LyricLineView extends View {
         if (height <= 0) return;
         float stop = Math.max(0f, Math.min(1f, fraction));
         if (stop >= 1f) {
-            leadPaint.setColor(BRIGHT);
+            leadPaint.setColor(tint(BRIGHT));
             leadLayout.draw(canvas);
             return;
         }
@@ -263,7 +273,7 @@ public final class LyricLineView extends View {
         float edge = Math.min(0.9999f, stop + 0.20f);
         if (edge <= from) edge = Math.min(0.9999f, from + 0.0001f);
         LinearGradient gradient = new LinearGradient(0, 0, 0, height,
-                new int[] {BRIGHT, BRIGHT, DIM_LINE, DIM_LINE},
+                new int[] {tint(BRIGHT), tint(BRIGHT), tint(DIM_LINE), tint(DIM_LINE)},
                 new float[] {0f, from, edge, 1f}, Shader.TileMode.CLAMP);
         leadPaint.setShader(gradient);
         leadPaint.setColor(Color.WHITE);
@@ -321,7 +331,7 @@ public final class LyricLineView extends View {
             canvas.scale(scale, scale, (minX + maxX) * 0.5f, (top + bottom) * 0.5f);
         }
         if (singing) {
-            leadPaint.setColor(DIM_WORD);
+            leadPaint.setColor(tint(DIM_WORD));
             leadPaint.setShadowLayer(0, 0, 0, 0);
             for (float[] seg : segments) {
                 int layer = canvas.save();
@@ -334,7 +344,7 @@ public final class LyricLineView extends View {
             for (float[] seg : segments) {
                 int layer = canvas.save();
                 canvas.clipRect(seg[0] - 1f, seg[2] - 2f, seg[1], seg[3] + 2f);
-                leadPaint.setColor(BRIGHT);
+                leadPaint.setColor(tint(BRIGHT));
                 leadPaint.setShadowLayer(0, 0, 0, 0);
                 leadLayout.draw(canvas);
                 canvas.restoreToCount(layer);
@@ -354,7 +364,7 @@ public final class LyricLineView extends View {
                 if (lit > 0f) {
                     int layer = canvas.save();
                     canvas.clipRect(seg[0] - 1f, seg[2] - 2f, seg[0] + lit, seg[3] + 2f);
-                    leadPaint.setColor(BRIGHT);
+                    leadPaint.setColor(tint(BRIGHT));
                     if (singing && glow > 0) leadPaint.setShadowLayer(7f, 0, 0, glow << 24);
                     leadLayout.draw(canvas);
                     canvas.restoreToCount(layer);
@@ -365,14 +375,14 @@ public final class LyricLineView extends View {
                     leadPaint.setShadowLayer(0, 0, 0, 0);
                     int layer = canvas.save();
                     canvas.clipRect(seg[0] + from, seg[2] - 2f, seg[0] + to, seg[3] + 2f);
-                    leadPaint.setColor(0x70FFFFFF);
+                    leadPaint.setColor(tint(0x70FFFFFF));
                     leadLayout.draw(canvas);
                     canvas.restoreToCount(layer);
                     float inner = Math.min(to, from + width * FILL_INNER_EDGE);
                     if (inner > from) {
                         layer = canvas.save();
                         canvas.clipRect(seg[0] + from, seg[2] - 2f, seg[0] + inner, seg[3] + 2f);
-                        leadPaint.setColor(0xB0FFFFFF);
+                        leadPaint.setColor(tint(0xB0FFFFFF));
                         leadLayout.draw(canvas);
                         canvas.restoreToCount(layer);
                     }

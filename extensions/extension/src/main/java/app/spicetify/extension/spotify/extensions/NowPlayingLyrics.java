@@ -288,13 +288,13 @@ public final class NowPlayingLyrics {
                     lines[i].setVisibility(GONE);
                     continue;
                 }
+                SpicyApi.Line line = lyrics.lines.get(index);
                 lines[i].setVisibility(VISIBLE);
                 boolean current = active >= 0 && i == 0;
-                lines[i].setText(current
-                        ? fillText(lyrics.lines.get(index), pos)
-                        : lyrics.lines.get(index).text);
-                lines[i].setTextColor(0x99FFFFFF);
+                lines[i].setText(current ? fillText(line, pos) : line.text);
+                lines[i].setTextColor(line.opposite ? 0x99FFD9A8 : 0x99FFFFFF);
                 lines[i].setTypeface(current ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
+                lines[i].setGravity(line.opposite ? Gravity.END : Gravity.START);
             }
             if (active != lastActive) {
                 lastActive = active;
@@ -312,7 +312,8 @@ public final class NowPlayingLyrics {
                     int at = text.indexOf(word.text, offset);
                     if (at < 0) continue;
                     if (word.startMs >= 0 && pos >= word.startMs) {
-                        spans.setSpan(new ForegroundColorSpan(Color.WHITE), at,
+                        spans.setSpan(new ForegroundColorSpan(
+                                line.opposite ? 0xFFFFE0C2 : Color.WHITE), at,
                                 at + word.text.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
                     }
                     offset = at + word.text.length();
@@ -321,7 +322,8 @@ public final class NowPlayingLyrics {
                 float fraction = (pos - line.startMs) / (float) (line.endMs - line.startMs);
                 int lit = Math.round(text.length() * Math.max(0f, Math.min(1f, fraction)));
                 if (lit > 0) {
-                    spans.setSpan(new ForegroundColorSpan(Color.WHITE), 0, lit,
+                    spans.setSpan(new ForegroundColorSpan(
+                            line.opposite ? 0xFFFFE0C2 : Color.WHITE), 0, lit,
                             Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
                 }
             }
